@@ -10,7 +10,7 @@ CreateContactMatrix <- function(country_nm, Nvec, source_dat, debug = T) {
   # source_dat: source for contact data, either "Mistry" of "Prem" [string]
   # debug: should the intermediate contact matrices be plotted? [boolean]
   # Returns:
-  # Contact matrix on density scale (F), per YEAR [matrix]
+  # 2-list with SCM matrices on density scale (F) and intensive scale (M), per YEAR [2-list matrix]
   
   # Load data
   if(source_dat == "Mistry") {
@@ -43,13 +43,13 @@ CreateContactMatrix <- function(country_nm, Nvec, source_dat, debug = T) {
   M_u <- Upsize_M(M = M_mat_corr, N = N_tar, N_u = N_vec, f_map = f_map)
   
   # Convert to per year and return
-  out <- 365 * M_u$F_mat
+  out <- list("M_mat" = 365 * M_u$M_mat, "F_mat" = 365 * M_u$F_mat)
   
   if(debug) {
     PlotMatrix(M_in = M_mat, plot_title = "Raw M matrix, without correction")
     PlotMatrix(M_in = M_mat_corr, plot_title = "M matrix, corrected for reciprocity")
     PlotMatrix(M_in = M_u$M_mat, plot_title = "M matrix, upsized")
-    PlotMatrix(M_in = out, plot_title = "F matrix, upsized")
+    PlotMatrix(M_in = out$F_mat, plot_title = "F matrix, upsized")
   }
   
   return(out)

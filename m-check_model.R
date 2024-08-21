@@ -12,6 +12,7 @@ source("f-PlotMatrix.R")
 source("f-CreateSerotransModel.R")
 source("f-ReformatSims.R")
 source("f-CreateContactMatrix.R")
+source("f-compute_R0.R")
 debug_bool <- F
 theme_set(theme_bw())
 par(bty = "l", las = 1, lwd = 2)
@@ -21,12 +22,14 @@ library(reshape2)
 # Top-level parameters ----------------------------------------------------
 dt_sim <- 1 # Time step separating simulated data points 
 dt_mod <- 1e-3 # Time step for stochastic model simulator
-country_nm <- c("United-Kingdom", "USA")
+#country_nm <- c("Israel", "USA")
+country_nm <- Sys.getenv("country_nm")
 n_sims <- 1 # No of stochastic simulations 
 rho_V_val <- 0.25 # Probability of immune boosting
 alpha_V_val <- 0.02 # Waning rate of infection-derived immunity
 contact_data <- "Mistry" # Source for contact data, either "Mistry" (85 1-yr groups, age 0 to 84) or "Prem" (16 5-yr age groups, age 0-4 to 75-79)
 stopifnot(contact_data %in% c("Mistry", "Prem"))
+print(country_nm)
 
 # Set demographic parameters ----------------------------------------------
 # As in Mistry et al., stratification in 1-yr age groups, from age 0 to age 84 (85 age groups overall) 
@@ -35,7 +38,7 @@ Ntot_val <- 1e7 # Total population size
 b_rate <- ifelse(contact_data == "Mistry", 1 / 85, 1 / 80)
 nA <- ifelse(contact_data == "Mistry", 86, 81)
 
-delta_vec <- 1 / c(4 / 12, 8 / 12, rep(1, nA - 2)) # Aging rates
+delta_vec <- 1 / c(6 / 12, 6 / 12, rep(1, nA - 2)) # Aging rates
 N_vec <- b_rate / delta_vec * Ntot_val # Age-specific population sizes
 stopifnot(all.equal(sum(N_vec), Ntot_val))
 
@@ -45,17 +48,20 @@ age_df <- data.frame(age_fac = 1:nA, age_max = cumsum(1 / delta_vec)) %>%
          age_mid = (age_min + age_max) / 2) %>% 
   select(age_fac, age_min, age_mid, age_max)
 
+age_breaks <- c(0, age_df$age_min[2], 1, 5, 10, 20, 40, 60, Inf)
+
 # Add factor age groups: 0-3 mo, 4-11 mo, 1-4 yr, 5-9 yr, 10-19 yr, 20-39 yr, 40-59 yr, >=60 yr
 age_df$age_cat <- cut(age_df$age_min, 
-                      breaks = c(0, age_df$age_min[2], 1, 5, 10, 20, 40, 60, Inf), 
+                      breaks = age_breaks, 
                       right = F, 
                       include.lowest = T)
 
 # Set contact matrix ----------------------------------------------------------
-F_mat <- CreateContactMatrix(country_nm = ifelse(contact_data == "Mistry", country_nm[1], country_nm[2]), 
+SCMs <- CreateContactMatrix(country_nm = ifelse(contact_data == "Mistry", country_nm[1], country_nm[2]), 
                              Nvec = N_vec, 
                              source_dat = contact_data, 
                              debug = T)
+F_mat <- SCMs$F_mat
 
 # Create and initialize POMP model -------------------------------------------------------
 seroMod <- CreateSerotransMod(nA = nA, 
@@ -93,22 +99,35 @@ state_vars_nm <- c("S1", "S2", "E1", "E2", "I1",
 accum_vars_nm <- c("Ci1", "Ci2", "Cs")
 
 # Run test simulation -----------------------------------------------------
-vac_cov <- 0.90
+vac_cov <- 0.95
 coef(seroMod, names(parms)) <- unname(parms)
-#coef(seroMod, "q1") <- 0.03
-#coef(seroMod, "iota") <- 1e-1
-#coef(seroMod, c("rho_R", "alpha_R")) <- c(0.66, 1 / 66)
+coef(seroMod, c("rho_R", "alpha_R")) <- c(6.6, 1 / 34)
 coef(seroMod, c("p_V_2", "p_V_3")) <- c(vac_cov, vac_cov - 0.1) # Vaccinate second and third age group
 coef(seroMod, c("alpha_V", "rho_V")) <- c(alpha_V_val, rho_V_val) # Vaccinate second age group
 
 sim_test <- simulate(seroMod, nsim = n_sims, format = "data.frame")
 
-sims_list <- ReformatSims(df_sim = sim_test, dt_sim = dt_sim)
+sims_list <- ReformatSims(df_sim = sim_test, dt_sim = dt_sim, age_breaks = age_breaks)
 vars_nm <- unique(sims_list[[1]]$var_nm)
 
-# Calculate mean age at first infection -----------------------------------
+# Calculate mean age at first infection and R0 -----------------------------------
 id_cur <- 1
 sim_cur <- filter(sims_list[[1]], .id == id_cur)
+
+q1 <- unname(coef(seroMod, "q1"))
+q2 <- unname(coef(seroMod, "q21") * q1)
+q3 <- unname(coef(seroMod, "q32") * q2)
+
+q_vec <- c(rep(q1, 11), rep(q2, 10), rep(q3, nA - 21))
+
+NGM <- compute_R0(theta = unname(coef(seroMod, "theta")), 
+                  gamma = unname(coef(seroMod, "gamma")), 
+                  N = N_vec, 
+                  q = q_vec, 
+                  delta = delta_vec, 
+                  Cmat = SCMs$M_mat)
+
+R0_val <- NGM %>% eigen() %>% pluck("values") %>% abs() %>% max()
 
 MAI <- sim_cur %>% 
   filter(var_nm == "Ci1") %>% 
@@ -125,7 +144,7 @@ MAI_pre_vac <- MAI %>%
 plot(MAI$time, MAI$MAI, type = "l", 
      xlab = "Time (years)", 
      ylab = "Mean age of first infection (years)", 
-     main = sprintf("MAI(prevaccine era) = %.2f years", MAI_pre_vac))
+     main = sprintf("Country = %s, MAI(prevaccine era) = %.2f years, R0=%.1f", country_nm, MAI_pre_vac, R0_val))
 abline(h = MAI_pre_vac, col = "grey")
 
 # Check population sizes for aggregated age groups ------------------------
@@ -305,17 +324,53 @@ for(v in var_type) {
       labs(x = "Proportion", y = "Age (years)") + 
       ggtitle(sprintf("Variable type: %s, variable name: %s", v, s))
     
-      if(s == "V") {
-        pl <- pl + geom_hline(yintercept = vac_cov, color = "grey")
-      }
+    if(s == "V") {
+      pl <- pl + geom_hline(yintercept = vac_cov, color = "grey")
+    }
     print(pl)
     print(pl2)
   }
 }
 
+# Plot contributions to seroprevalence ----------------------------------
+tmp <- sims_list[["merged_ages"]] %>% 
+  filter(.id == id_cur, 
+         between(time, t_range[1], t_range[2]), 
+         var_nm %in% c("seroPrev", "Rp1", "Rp2", "Vp", "S1", "S2", "R", "V")) %>% 
+  select(-var_type) %>% 
+  mutate(prop = n / pop) %>% 
+  select(-c(pop, n)) %>% 
+  pivot_wider(names_from = "var_nm", values_from = "prop") %>% 
+  mutate(Rp1 = Rp1 / seroPrev, 
+         Rp2 = Rp2 / seroPrev, 
+         Vp = Vp / seroPrev, 
+         S = S1 + S2) %>% 
+  pivot_longer(cols =-c(".id", "time", "age_cat")) %>% 
+  group_by(age_cat, name) %>% 
+  summarise(value = mean(value)) %>% 
+  ungroup()
+
+# Variables S, V, and R
+pl <- ggplot(data = tmp %>% filter(name %in% c("S", "R", "V")) %>% mutate(name = fct_relevel(name, "R", after = 1)), 
+             mapping = aes(x = age_cat, y = value)) + 
+  geom_col(position = "dodge") + 
+  facet_wrap(~ name, scales = "fixed", ncol = 2) + 
+  labs(x = "Age", y = "Prevalence")
+print(pl)
+
+# Variables S, V, and R
+pl <- ggplot(data = tmp %>% filter(name %in% c("Rp1", "Rp2", "Vp")), 
+             mapping = aes(x = age_cat, y = value)) + 
+  geom_col(position = "dodge") + 
+  facet_wrap(~ name, scales = "fixed", ncol = 2) + 
+  labs(x = "Age", y = "Proportion (relative to seroprevalence)")
+print(pl)
+
 # Plot serological endpoints ----------------------------------------------
 tmp <- sims_list[["merged_ages"]] %>% 
-  filter(.id == id_cur, between(time, t_range[1], t_range[2]), var_nm %in% c("seroPrev", "seroPPV", "seroInc", "trueInc")) %>% 
+  filter(.id == id_cur, 
+         between(time, t_range[1], t_range[2]), 
+         var_nm %in% c("seroPrev", "seroPPV", "seroInc", "trueInc", "Rp1", "Rp2", "Vp")) %>% 
   select(-var_type) %>% 
   mutate(prop = n / pop)
 
@@ -329,7 +384,9 @@ tmp_sumry <- tmp %>%
 # Seroprevalence
 pl <- ggplot(data = tmp %>% filter(var_nm == "seroPrev"), 
              mapping = aes(x = 1e2 * prop, y = age_cat)) + 
-  geom_density_ridges(quantile_lines = T, quantiles = 2, 
+  geom_density_ridges(quantile_lines = T, 
+                      quantiles = 2, 
+                      scale = 0.9, 
                       jittered_points = F, 
                       #point_shape = "|", 
                       position = position_points_jitter(height = 0)) + 
@@ -344,6 +401,7 @@ pl <- ggplot(data = tmp %>% filter(var_nm == "seroPPV"),
              mapping = aes(x = 1e2 * n, y = age_cat)) + 
   geom_density_ridges(quantile_lines = T, 
                       quantiles = 2, 
+                      scale = 0.9,
                       jittered_points = F, 
                       #point_shape = "|", 
                       position = position_points_jitter(height = 0)) + 
@@ -354,7 +412,6 @@ pl <- ggplot(data = tmp %>% filter(var_nm == "seroPPV"),
 print(pl)
 
 # Sero-incidence vs. true incidence
-
 pl <- ggplot(data = tmp %>% filter(var_nm %in% c("seroInc", "trueInc")), 
              mapping = aes(x = 1e5 * prop, y = age_cat, color = var_nm, fill = var_nm)) + 
   geom_density_ridges(quantile_lines = T, 

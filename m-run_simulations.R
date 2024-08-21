@@ -21,7 +21,8 @@ library(reshape2)
 # Top-level parameters ----------------------------------------------------
 dt_sim <- 1 # Time step separating simulated data points 
 dt_mod <- 1e-3 # Time step for stochastic model simulator
-country_nm <- c("United-Kingdom", "USA")
+#country_nm <- c("United-Kingdom", "USA")
+country_nm <- Sys.getenv("country_nm")
 n_sims <- 10 # No of stochastic simulations 
 n_years_sim <- 300 # No of years of simulations (NB: vaccine is introduced at year 150)
 n_years_end <- 20 # No of years to consider at the end of the simulation
@@ -64,10 +65,11 @@ age_df$age_cat <- cut(age_df$age_min,
                       include.lowest = T)
 
 # Set contact matrix ----------------------------------------------------------
-F_mat <- CreateContactMatrix(country_nm = ifelse(contact_data == "Mistry", country_nm[1], country_nm[2]), 
+SCMs <- CreateContactMatrix(country_nm = ifelse(contact_data == "Mistry", country_nm[1], country_nm[2]), 
                              Nvec = N_vec, 
                              source_dat = contact_data, 
                              debug = T)
+F_mat <- SCMs$F_mat
 
 # Create and initialize POMP model -------------------------------------------------------
 seroMod <- CreateSerotransMod(nA = nA, 
