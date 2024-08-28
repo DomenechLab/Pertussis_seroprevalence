@@ -19,23 +19,24 @@ print(packageVersion("pomp"))
 library(reshape2)
 
 # Top-level parameters ----------------------------------------------------
+
+run_clust <- F
+country_nm <- ifelse(run_clust, Sys.getenv("country_nm"), "United-Kingdom")
 dt_sim <- 1 # Time step separating simulated data points 
 dt_mod <- 1e-3 # Time step for stochastic model simulator
-#country_nm <- c("United-Kingdom", "USA")
-country_nm <- Sys.getenv("country_nm")
 n_sims <- 10 # No of stochastic simulations 
 n_years_sim <- 300 # No of years of simulations (NB: vaccine is introduced at year 150)
 n_years_end <- 20 # No of years to consider at the end of the simulation
-rho_V_val <- 0.5 # Probability of immune boosting (from vaccinated state)
-alpha_V_val <- 0.02 # Waning rate of vaccine-derived immunity (per year)
-vac_cov_prim <- 0.95 # Vaccine coverage from primary series (NB: for boosters, coverage is assumed 10% lower) 
+rho_V_val <- 0.25 # Probability of immune boosting (from vaccinated state)
+alpha_V_val <- 0.1 # Waning rate of vaccine-derived immunity (per year)
+vac_cov_prim <- 0.9 # Vaccine coverage from primary series (NB: for boosters, coverage is assumed 10% lower) 
 ages_to_vac <- c(2, 3) # Indices of ages to vaccinate
 
 contact_data <- "Mistry" # Source for contact data, either "Mistry" (85 1-yr groups, age 0 to 84) or "Prem" (16 5-yr age groups, age 0-4 to 75-79)
 stopifnot(contact_data %in% c("Mistry", "Prem"))
 country_nm <- ifelse(contact_data == "Mistry", country_nm[1], country_nm[2])
 if(!dir.exists(paste0("_saved/", country_nm))) dir.create(paste0("_saved/", country_nm))
-nm_file_save <- sprintf("_saved/%s/alphaV_%.2f-rhoV_%.1f-vacCov_%.2f-%ddoses", 
+nm_file_save <- sprintf("_saved/%s/alphaV_%.2f-rhoV_%.2f-vacCov_%.2f-%ddoses", 
                         country_nm, alpha_V_val, rho_V_val, vac_cov_prim, length(ages_to_vac))
 
 # Set demographic parameters ----------------------------------------------
@@ -56,7 +57,7 @@ age_df <- data.frame(age_fac = 1:nA, age_max = cumsum(1 / delta_vec)) %>%
   select(age_fac, age_min, age_mid, age_max)
 
 # Age breaks for aggregated age groups
-age_breaks <- c(0, age_df$age_min[2], 1, 5, 10, 20, 40, 60, Inf)
+age_breaks <- c(0, age_df$age_min[2], 1, 5, 10, 15, 20, 25, 45, 65, Inf)
 
 # Add factor age groups: 0-3 mo, 4-11 mo, 1-4 yr, 5-9 yr, 10-19 yr, 20-39 yr, 40-59 yr, >=60 yr
 age_df$age_cat <- cut(age_df$age_min, 
@@ -66,9 +67,9 @@ age_df$age_cat <- cut(age_df$age_min,
 
 # Set contact matrix ----------------------------------------------------------
 SCMs <- CreateContactMatrix(country_nm = ifelse(contact_data == "Mistry", country_nm[1], country_nm[2]), 
-                             Nvec = N_vec, 
-                             source_dat = contact_data, 
-                             debug = T)
+                            Nvec = N_vec, 
+                            source_dat = contact_data, 
+                            debug = F)
 F_mat <- SCMs$F_mat
 
 # Create and initialize POMP model -------------------------------------------------------
@@ -167,24 +168,80 @@ pl <- ggplot(data = pop_checks,
   labs(x = "Time (years)", y = "Count")
 print(pl)
 
-# Calculate mean age at first infection -----------------------------------
-MAI_pre_vac <- sims_all %>% 
-  filter(var_nm == "Ci1", between(time, parms["t_V"] - 9, parms["t_V"])) %>% 
-  group_by(.id, time) %>% 
-  summarise(MAI = sum(age_mid * n) / sum(n)) %>% 
-  ungroup() %>% 
-  group_by(.id) %>% 
-  summarise(MAI = mean(MAI)) %>% 
+# Calculate mean age at first infection (pre-vaccine era) -----------------------------------
+
+# Calculate age distribution of primary and primary infections
+# Average over time: inc = E_t(cases_t / pop_t)
+age_dist <- sims_all %>% 
+  filter(var_nm %in% c("Ci1", "Ci2"), 
+         between(time, parms["t_V"] - n_years_end + 1, parms["t_V"])) %>% 
+  group_by(.id, var_nm, age_min, age_mid, age_max) %>% 
+  summarise(inc_mean = mean(n / pop), 
+            inc_sd = sd(n / pop)) %>% 
   ungroup()
 
-pl <- ggplot(data = MAI_pre_vac, mapping = aes(x = .id, y = MAI)) + 
-  geom_col() + 
-  labs(x = "Simulation ID", y = "MAI(prevac) (years)", title = sprintf("Mean(MAI) = %.1f years", mean(MAI_pre_vac$MAI)))
+# Calculate mean and mode of age distribution
+age_dist_stats <- age_dist %>% 
+  filter(var_nm == "Ci1") %>% 
+  group_by(.id) %>% 
+  summarise(mean = sum(age_mid * inc_mean) / sum(inc_mean), 
+            mode = age_mid[which.max(inc_mean)]) %>% 
+  ungroup()
+
+# Plot age distribution
+# Add mean (SD) for mean and mode across simulations
+pl <- ggplot(data = age_dist, 
+             mapping = aes(x = age_min, y = 1e2 * inc_mean, group = interaction(.id, var_nm), color = var_nm)) + 
+  geom_line() + 
+  scale_y_sqrt() + 
+  theme_classic() + 
+  labs(x = "Age (years)", 
+       y = "Incidence rate (per year per 100)", 
+       title = sprintf("%s, Prevaccine era, mean(A1) = %.1f (%.1f), mode(A1) = %.1f (%.1f) years", 
+                       country_nm, 
+                       mean(age_dist_stats$mean), sd(age_dist_stats$mean), 
+                       mean(age_dist_stats$mode), sd(age_dist_stats$mode)))
+print(pl)
+
+# Calculate mean age at second infection (vaccine era) -----------------------------------
+
+# Calculate age distribution of primary and primary infections
+# Average over time: inc = E_t(cases_t / pop_t)
+age_dist <- sims_all %>% 
+  filter(var_nm %in% c("Ci1", "Ci2"), 
+         between(time, max(time) - n_years_end + 1, max(time))) %>% 
+  group_by(.id, var_nm, age_min, age_mid, age_max) %>% 
+  summarise(inc_mean = mean(n / pop), 
+            inc_sd = sd(n / pop)) %>% 
+  ungroup()
+
+# Calculate mean and mode of age distribution
+age_dist_stats <- age_dist %>% 
+  filter(var_nm == "Ci2") %>% 
+  group_by(.id) %>% 
+  summarise(mean = sum(age_mid * inc_mean) / sum(inc_mean), 
+            mode = age_mid[which.max(inc_mean)]) %>% 
+  ungroup()
+
+# Plot age distribution
+# Add mean (SD) for mean and mode across simulations
+pl <- ggplot(data = age_dist, 
+             mapping = aes(x = age_min, y = 1e5 * inc_mean, group = interaction(.id, var_nm), color = var_nm)) + 
+  geom_line() + 
+  scale_y_sqrt() + 
+  theme_classic() + 
+  labs(x = "Age (years)", 
+       y = "Incidence rate (per year per 100,000)", 
+       title = sprintf("%s, Vaccine era, mean(A2) = %.1f (%.1f), mode(A2) = %.1f (%.1f) years", 
+                       country_nm, 
+                       mean(age_dist_stats$mean), sd(age_dist_stats$mean), 
+                       mean(age_dist_stats$mode), sd(age_dist_stats$mode)))
 print(pl)
 
 # Plot serological endpoints -------------------------------------------
 tmp <- sims_agg %>% 
-  filter(time >= max(time) - n_years_end - 1, var_nm %in% c("seroPrev", "seroPPV", "seroInc", "trueInc")) %>% 
+  filter(between(time, max(time) - n_years_end + 1, max(time)), 
+         var_nm %in% c("seroPrev", "seroPPV", "seroInc", "trueInc")) %>% 
   select(-var_type) %>% 
   mutate(prop = n / pop)
 

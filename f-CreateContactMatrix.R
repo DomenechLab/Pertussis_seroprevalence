@@ -20,7 +20,8 @@ CreateContactMatrix <- function(country_nm, Nvec, source_dat, debug = T) {
     
     # Load raw data (unit: PER DAY, dimension 85*85, 85 1-yr age groups from age 0 to 84)
     M_mat <- read_csv(file = sprintf("%s/%s", path_dat,f_country), 
-                      col_names = F)
+                      col_names = F, 
+                      show_col_types = F)
     
     N_tar <- rep(sum(Nvec) / 85, 85) 
     f_map <- function(i) ifelse(i <= 2, 1, i - 1) # Mapping function
