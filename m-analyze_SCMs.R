@@ -36,8 +36,11 @@ for(i in seq_along(l_files)) {
     as.matrix()
   colnames(dat_SCM[[i]]) <- NULL
   
+  # Remove age groups 80-84 yr
+  dat_SCM[[i]] <- dat_SCM[[i]][-c(81:85), -c(81:85)]
+  
   # Project to model population structure 
-  N_vec <- rep(1e7 / 85, 85)
+  N_vec <- rep(1e7 / 80, 80)
   dat_SCM[[i]] <- Project_M(M = dat_SCM[[i]], N_tar = N_vec)
 }
 
@@ -48,8 +51,10 @@ c_names <- read.table(file = "_data/list_countries.txt") %>% pluck(1)
 c_names[c_names == "United_States"] <- "United-States"
 dat_SCM_sub <- dat_SCM[c_names]
 
+n_ages <- ncol(dat_SCM[[1]]) # No of age groups
+
 deg_dist <- dat_SCM_sub %>% 
-  map(.f = \(x) data.frame(age = 0:84, r_cont = rowSums(x))) %>% 
+  map(.f = \(x) data.frame(age = 0:(n_ages - 1), r_cont = rowSums(x))) %>% 
   bind_rows(.id = "country")
 
 pl <- ggplot(data = deg_dist %>% filter(age <= 85), 
@@ -140,7 +145,7 @@ fviz_dist(dist.obj = dist_mat)
 
 # For the silhouette method, both pam and hclust suggest an optimal no of 10
 nb <- clValid(obj = dat_SCM_mat, 
-              metric = "manhattan",
+              metric = dist_nm,
               nClust = 5:20, 
               clMethods = c("hierarchical", "pam"), 
               validation = "internal", 
@@ -152,6 +157,7 @@ fviz_nbclust(x = dat_SCM_mat,
              #FUNcluster = pam, 
              FUNcluster = hcut, 
              diss = dist_mat, 
+             #method = "gap_stat", 
              method = "silhouette", 
              k.max = 20, 
              nboot = 50)
@@ -160,11 +166,12 @@ fviz_nbclust(x = dat_SCM_mat,
 
 # Hierarchical clustering
 cl_hc <- hclust(d = dist_mat, method = "ward.D2")
-fviz_dend(x = cl_hc, k = 8, type = "phylogenic")
+plot(cl_hc)
+fviz_dend(x = cl_hc, k = 10, type = "phylogenic")
+fviz_dend(x = cl_hc, k = 10, type = "rectangle", horiz = F)
 
 # PAM algorithm
-cl_pam <- pam(x = dist_mat, k = 10, diss = T)
-
+cl_pam <- pam(x = dist_mat, k = 11, diss = T)
 
 # Cluster by age with contiguity constraints ------------------------------
 # dat_age <- dat_SCM[["United-States"]]

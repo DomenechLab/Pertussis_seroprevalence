@@ -2,12 +2,13 @@
 # Prepare contact matrix for use in serotransmission model
 #######################################################################################################
 
-CreateContactMatrix <- function(country_nm, Nvec, source_dat, debug = T) {
+CreateContactMatrix <- function(country_nm, Nvec, source_dat, trim_mat = T, debug = T) {
   
   # Args: 
   # country_nm: name of country [string]
   # Nvec: age-specific population sizes in simulated population [numeric vector]
   # source_dat: source for contact data, either "Mistry" of "Prem" [string]
+  # trim_mat: should the SCM be trimmed? If true, the age groups 80-84 yr will be removed [boolean]
   # debug: should the intermediate contact matrices be plotted? [boolean]
   # Returns:
   # 2-list with SCM matrices on density scale (F) and intensive scale (M), per YEAR [2-list matrix]
@@ -23,7 +24,9 @@ CreateContactMatrix <- function(country_nm, Nvec, source_dat, debug = T) {
                       col_names = F, 
                       show_col_types = F)
     
-    N_tar <- rep(sum(Nvec) / 85, 85) 
+    if(trim_mat) M_mat <- M_mat[-c(81:85), -c(81:85)]
+    
+    N_tar <- rep(sum(Nvec) / ncol(M_mat), ncol(M_mat)) 
     f_map <- function(i) ifelse(i <= 2, 1, i - 1) # Mapping function
   } else if(source_dat == "Prem") {
     

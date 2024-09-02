@@ -20,7 +20,7 @@ Project_M <- function(M, N_tar) {
     Ni_mat[i, ] <- N_tar[i]
   }
   
-  # General term of corrected matrix: (Mij * Ni * Mji * Nj) / (2 * Ni)  
+  # General term of corrected matrix: (Mij * Ni + Mji * Nj) / (2 * Ni)  
   # Method M1 (pairwise correction) in Ref 1
   E <- M * Ni_mat
   M_out <- (E + t(E)) / (2 * Ni_mat)

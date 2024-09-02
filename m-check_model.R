@@ -20,10 +20,10 @@ print(packageVersion("pomp"))
 library(reshape2)
 
 # Top-level parameters ----------------------------------------------------
+run_clust <- F
 dt_sim <- 1 # Time step separating simulated data points 
 dt_mod <- 1e-3 # Time step for stochastic model simulator
-#country_nm <- c("Israel", "USA")
-country_nm <- Sys.getenv("country_nm")
+country_nm <- ifelse(run_clust, Sys.getenv("country_nm"), "United_States")
 n_sims <- 1 # No of stochastic simulations 
 rho_V_val <- 0.25 # Probability of immune boosting
 alpha_V_val <- 0.02 # Waning rate of infection-derived immunity
@@ -32,11 +32,11 @@ stopifnot(contact_data %in% c("Mistry", "Prem"))
 print(country_nm)
 
 # Set demographic parameters ----------------------------------------------
-# As in Mistry et al., stratification in 1-yr age groups, from age 0 to age 84 (85 age groups overall) 
+# As in Mistry et al., stratification in 1-yr age groups, from age 0 to age 79 (80 age groups overall) 
 # Stratify age 0 into two subgroups for the primary vaccination course 
 Ntot_val <- 1e7 # Total population size
-b_rate <- ifelse(contact_data == "Mistry", 1 / 85, 1 / 80)
-nA <- ifelse(contact_data == "Mistry", 86, 81)
+b_rate <- 1 / 80 # Birth rate (per year)
+nA <- 81 # No of age groups
 
 delta_vec <- 1 / c(6 / 12, 6 / 12, rep(1, nA - 2)) # Aging rates
 N_vec <- b_rate / delta_vec * Ntot_val # Age-specific population sizes
@@ -58,9 +58,10 @@ age_df$age_cat <- cut(age_df$age_min,
 
 # Set contact matrix ----------------------------------------------------------
 SCMs <- CreateContactMatrix(country_nm = ifelse(contact_data == "Mistry", country_nm[1], country_nm[2]), 
-                             Nvec = N_vec, 
-                             source_dat = contact_data, 
-                             debug = T)
+                            Nvec = N_vec, 
+                            source_dat = contact_data,
+                            trim_mat = T,  
+                            debug = T)
 F_mat <- SCMs$F_mat
 
 # Create and initialize POMP model -------------------------------------------------------

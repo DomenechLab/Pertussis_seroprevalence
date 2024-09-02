@@ -21,7 +21,7 @@ library(reshape2)
 # Top-level parameters ----------------------------------------------------
 
 run_clust <- F
-country_nm <- ifelse(run_clust, Sys.getenv("country_nm"), "United-Kingdom")
+country_nm <- ifelse(run_clust, Sys.getenv("country_nm"), "Israel")
 dt_sim <- 1 # Time step separating simulated data points 
 dt_mod <- 1e-3 # Time step for stochastic model simulator
 n_sims <- 10 # No of stochastic simulations 
@@ -40,11 +40,11 @@ nm_file_save <- sprintf("_saved/%s/alphaV_%.2f-rhoV_%.2f-vacCov_%.2f-%ddoses",
                         country_nm, alpha_V_val, rho_V_val, vac_cov_prim, length(ages_to_vac))
 
 # Set demographic parameters ----------------------------------------------
-# As in Mistry et al., stratification in 1-yr age groups, from age 0 to age 84 (85 age groups overall) 
+# As in Mistry et al., stratification in 1-yr age groups, from age 0 to age 79 (80 age groups overall) 
 # Stratify age 0 into two subgroups for the primary vaccination course 
 Ntot_val <- 1e7 # Total population size
-b_rate <- ifelse(contact_data == "Mistry", 1 / 85, 1 / 80)
-nA <- ifelse(contact_data == "Mistry", 86, 81)
+b_rate <- 1 / 80 # Birth rate (per year)
+nA <- 81 # No of age groups
 
 delta_vec <- 1 / c(6 / 12, 6 / 12, rep(1, nA - 2)) # Aging rates
 N_vec <- b_rate / delta_vec * Ntot_val # Age-specific population sizes
@@ -69,6 +69,7 @@ age_df$age_cat <- cut(age_df$age_min,
 SCMs <- CreateContactMatrix(country_nm = ifelse(contact_data == "Mistry", country_nm[1], country_nm[2]), 
                             Nvec = N_vec, 
                             source_dat = contact_data, 
+                            trim_mat = T,  
                             debug = F)
 F_mat <- SCMs$F_mat
 
