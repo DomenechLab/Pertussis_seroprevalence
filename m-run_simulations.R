@@ -6,6 +6,7 @@
 rm(list = ls())
 source("s-base_packages.R")
 library(pomp)
+library(reshape2)
 source("f-Project_M.R")
 source("f-Upsize_M.R")
 source("f-PlotMatrix.R")
@@ -16,28 +17,42 @@ debug_bool <- F
 theme_set(theme_bw())
 par(bty = "l", las = 1, lwd = 2)
 print(packageVersion("pomp"))
-library(reshape2)
 
-# Top-level parameters ----------------------------------------------------
+# Set parameters ----------------------------------------------------
+run_clust <- T
 
-run_clust <- F
-country_nm <- ifelse(run_clust, Sys.getenv("country_nm"), "Israel")
 dt_sim <- 1 # Time step separating simulated data points 
 dt_mod <- 1e-3 # Time step for stochastic model simulator
 n_sims <- 10 # No of stochastic simulations 
 n_years_sim <- 300 # No of years of simulations (NB: vaccine is introduced at year 150)
 n_years_end <- 20 # No of years to consider at the end of the simulation
-rho_V_val <- 0.25 # Probability of immune boosting (from vaccinated state)
-alpha_V_val <- 0.1 # Waning rate of vaccine-derived immunity (per year)
-vac_cov_prim <- 0.9 # Vaccine coverage from primary series (NB: for boosters, coverage is assumed 10% lower) 
 ages_to_vac <- c(2, 3) # Indices of ages to vaccinate
 
 contact_data <- "Mistry" # Source for contact data, either "Mistry" (85 1-yr groups, age 0 to 84) or "Prem" (16 5-yr age groups, age 0-4 to 75-79)
 stopifnot(contact_data %in% c("Mistry", "Prem"))
-country_nm <- ifelse(contact_data == "Mistry", country_nm[1], country_nm[2])
-if(!dir.exists(paste0("_saved/", country_nm))) dir.create(paste0("_saved/", country_nm))
-nm_file_save <- sprintf("_saved/%s/alphaV_%.2f-rhoV_%.2f-vacCov_%.2f-%ddoses", 
-                        country_nm, alpha_V_val, rho_V_val, vac_cov_prim, length(ages_to_vac))
+
+# Set control parameters --------------------------------------------------
+if(run_clust) {
+  country_nm <- as.character(Sys.getenv("COUNTRY")); print(country_nm)
+  rho_V_val <- as.numeric(Sys.getenv("RHO_V")); print(rho_V_val)
+  alpha_V_val <- as.numeric(Sys.getenv("ALPHA_V")); print(alpha_V_val)
+  rho_R_val <- as.numeric(Sys.getenv("RHO_R")); print(rho_R_val)
+  alpha_R_val <- as.numeric(Sys.getenv("ALPHA_R")); print(alpha_R_val)
+  vac_cov_prim <- as.numeric(Sys.getenv("V_COV")); print(vac_cov_prim)
+  
+} else {
+  country_nm <- "Israel"
+  rho_V_val <- 0.25 # Immune boosting coefficient (from V state)
+  alpha_V_val <- 0.1 # Waning rate of vaccine-derived immunity (per year)
+  rho_R_val <- 6.6 # Immune boosting coefficient (from R state)
+  alpha_R_val <- 1 / 34 # Waning rate of infection-derived immunity (per year)
+  vac_cov_prim <- 0.9 # Vaccine coverage from primary series (NB: for boosters, coverage is assumed 10% lower) 
+}
+
+# Name of file to save
+nm_file_save <- sprintf("_outputs_cluster/saved/%s-alphaV_%.2f-rhoV_%.2f-alphaR_%.2f-rhoR_%.2f-vacCov_%.2f-%ddoses", 
+                        country_nm, alpha_V_val, rho_V_val, alpha_R_val, rho_R_val, vac_cov_prim, length(ages_to_vac))
+pdf(file = paste0(nm_file_save, ".pdf"), width = 12, height = 8)
 
 # Set demographic parameters ----------------------------------------------
 # As in Mistry et al., stratification in 1-yr age groups, from age 0 to age 79 (80 age groups overall) 
@@ -66,7 +81,7 @@ age_df$age_cat <- cut(age_df$age_min,
                       include.lowest = T)
 
 # Set contact matrix ----------------------------------------------------------
-SCMs <- CreateContactMatrix(country_nm = ifelse(contact_data == "Mistry", country_nm[1], country_nm[2]), 
+SCMs <- CreateContactMatrix(country_nm = country_nm, 
                             Nvec = N_vec, 
                             source_dat = contact_data, 
                             trim_mat = T,  
@@ -95,7 +110,7 @@ parms[paste0("delta_", 1:nA)] <- delta_vec
 parms[paste0("N_", 1:nA)] <- N_vec
 parms["N_tot"] <- Ntot_val
 parms["b_rate"] <- b_rate
-parms[c("rho_R", "alpha_R")] <- c(6.6, 1 / 34)
+parms[c("alpha_R", "rho_R")] <- c(alpha_R_val, rho_R_val)
 parms[c("alpha_V", "rho_V")] <- c(alpha_V_val, rho_V_val)
 for(i in seq_along(ages_to_vac)) {
   parms[paste0("p_V_", ages_to_vac[i])] <- ifelse(i == 1, vac_cov_prim, vac_cov_prim - 0.1)
@@ -303,6 +318,9 @@ pl <- ggplot(data = tmp %>% filter(var_nm %in% c("seroInc", "trueInc")),
   scale_x_log10() + 
   theme_classic()
 print(pl)
+
+# Exit instructions -------------------------------------------------------
+dev.off()
 
 #######################################################################################################
 # End

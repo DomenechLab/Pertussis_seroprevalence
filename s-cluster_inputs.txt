@@ -1,0 +1,11 @@
+ 
+sbatch --export=COUNTRY="China",RHO_V="0.25",ALPHA_V="0.02",RHO_R="6.6",ALPHA_R="0.0294",V_COV="0.9" m-run_simulations.sh
+sbatch --export=COUNTRY="Czech",RHO_V="0.25",ALPHA_V="0.02",RHO_R="6.6",ALPHA_R="0.0294",V_COV="0.9" m-run_simulations.sh
+sbatch --export=COUNTRY="Germany",RHO_V="0.25",ALPHA_V="0.02",RHO_R="6.6",ALPHA_R="0.0294",V_COV="0.9" m-run_simulations.sh
+sbatch --export=COUNTRY="India",RHO_V="0.25",ALPHA_V="0.02",RHO_R="6.6",ALPHA_R="0.0294",V_COV="0.9" m-run_simulations.sh
+sbatch --export=COUNTRY="Israel",RHO_V="0.25",ALPHA_V="0.02",RHO_R="6.6",ALPHA_R="0.0294",V_COV="0.9" m-run_simulations.sh
+sbatch --export=COUNTRY="Lithuania",RHO_V="0.25",ALPHA_V="0.02",RHO_R="6.6",ALPHA_R="0.0294",V_COV="0.9" m-run_simulations.sh
+sbatch --export=COUNTRY="Spain",RHO_V="0.25",ALPHA_V="0.02",RHO_R="6.6",ALPHA_R="0.0294",V_COV="0.9" m-run_simulations.sh
+sbatch --export=COUNTRY="Sweden",RHO_V="0.25",ALPHA_V="0.02",RHO_R="6.6",ALPHA_R="0.0294",V_COV="0.9" m-run_simulations.sh
+sbatch --export=COUNTRY="United-Kingdom",RHO_V="0.25",ALPHA_V="0.02",RHO_R="6.6",ALPHA_R="0.0294",V_COV="0.9" m-run_simulations.sh
+sbatch --export=COUNTRY="United_States",RHO_V="0.25",ALPHA_V="0.02",RHO_R="6.6",ALPHA_R="0.0294",V_COV="0.9" m-run_simulations.sh
