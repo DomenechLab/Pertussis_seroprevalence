@@ -35,9 +35,9 @@ stopifnot(contact_data %in% c("Mistry", "Prem"))
 if(run_clust) {
   country_nm <- as.character(Sys.getenv("COUNTRY")); print(country_nm)
   rho_V_val <- as.numeric(Sys.getenv("RHO_V")); print(rho_V_val)
-  alpha_V_val <- as.numeric(Sys.getenv("ALPHA_V")); print(alpha_V_val)
+  alpha_V_val <- 1 / as.numeric(Sys.getenv("D_V")); print(alpha_V_val)
   rho_R_val <- as.numeric(Sys.getenv("RHO_R")); print(rho_R_val)
-  alpha_R_val <- as.numeric(Sys.getenv("ALPHA_R")); print(alpha_R_val)
+  alpha_R_val <- 1 / as.numeric(Sys.getenv("D_R")); print(alpha_R_val)
   vac_cov_prim <- as.numeric(Sys.getenv("V_COV")); print(vac_cov_prim)
   
 } else {
@@ -50,8 +50,8 @@ if(run_clust) {
 }
 
 # Name of file to save
-nm_file_save <- sprintf("_outputs_cluster/saved/%s-alphaV_%.2f-rhoV_%.2f-alphaR_%.2f-rhoR_%.2f-vacCov_%.2f-%ddoses", 
-                        country_nm, alpha_V_val, rho_V_val, alpha_R_val, rho_R_val, vac_cov_prim, length(ages_to_vac))
+nm_file_save <- sprintf("_outputs_cluster/saved/%s-DV_%.0f-rhoV_%.2f-DR_%.0f-rhoR_%.2f-vacCov_%.2f-%ddoses", 
+                        country_nm, 1 / alpha_V_val, rho_V_val, 1 / alpha_R_val, rho_R_val, vac_cov_prim, length(ages_to_vac))
 pdf(file = paste0(nm_file_save, ".pdf"), width = 12, height = 8)
 
 # Set demographic parameters ----------------------------------------------

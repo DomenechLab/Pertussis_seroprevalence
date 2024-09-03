@@ -10,22 +10,35 @@ par(bty = "l", las = 1, lwd = 2)
 add_rugs <- F # Should rugs be added for every data point
 
 # Parameters of simulations to plot ---------------------------------------
-alphaV <- 0.02 # Waning rate of vaccine-derived immunity
+DV <- 10 # Average duration of vaccine-derived immunity (in years)
 rhoV <- 0.25 # Boosting coefficient of vaccine-derived immunity
+DR <- 34 # Average duration of infection-derived immunity (in years)
+rhoR <- 6.6 # Boosting coefficient of infection-derived immunity
 vacCov <- 0.9 # Effective vaccine coverage
 n_doses <- 2 # No of vaccine doses
-nm_file <- sprintf("alphaV_%.2f-rhoV_%.2f-vacCov_%.2f-%ddoses", alphaV, rhoV, vacCov, n_doses)
-if(!dir.exists(sprintf("_figures/%s", nm_file))) dir.create(sprintf("_figures/%s", nm_file))
+nm_dir <- sprintf("DV_%.0f-rhoV_%.2f-DR_%.0f-rhoR_%.2f-vacCov_%.2f-%ddoses", DV, rhoV, DR, rhoR, vacCov, n_doses)
+stopifnot(dir.exists(sprintf("_saved/%s", nm_dir)))
+if(!dir.exists(sprintf("_figures/%s", nm_dir))) dir.create(sprintf("_figures/%s", nm_dir))
+dir.create(sprintf("_figures/%s/_all", nm_dir))
 
 # Load simulations -------------------------------------------------------------
-l_countries <- list.dirs(path = "_saved", full.names = F, recursive = F)
-sims <- vector(mode = "list", length = length(l_countries))
+l_files <- list.files(path = sprintf("_saved/%s", nm_dir), pattern = ".rds")
+l_countries <- str_extract(string = l_files, pattern = "^(.*?)(?=-DV)")
+
+sims <- vector(mode = "list", length = length(l_files))
 names(sims) <- l_countries
 
-for(i in seq_along(l_countries)) {
-  sims[[i]] <- readRDS(file = sprintf("_saved/%s/alphaV_%.2f-rhoV_%.2f-vacCov_%.2f-%ddoses.rds", 
-                                      l_countries[i], alphaV, rhoV, vacCov, n_doses)) %>% 
+for(i in seq_along(l_files)) {
+  sims[[i]] <- readRDS(file = sprintf("_saved/%s/%s", nm_dir, l_files[i])) %>% 
     pluck("merged_ages")
+  
+  # Move PDF files
+  nm_pdf <- str_replace(l_files[i], ".rds", ".pdf")
+  if(file.exists(sprintf("_saved/%s/%s", nm_dir, nm_pdf))) {
+    file.copy(from = sprintf("_saved/%s/%s", nm_dir, nm_pdf), 
+              to = sprintf("_figures/%s/_all/%s", nm_dir, nm_pdf))
+    file.remove(sprintf("_saved/%s/%s", nm_dir, nm_pdf))
+  }
 }
 
 sims <- sims %>% 
@@ -99,7 +112,7 @@ pl <- ggplot(data = tmp,
   guides(color = F)
 print(pl)
 
-ggsave(filename = sprintf("_figures/%s/main_Sp_PPV.pdf", nm_file), 
+ggsave(filename = sprintf("_figures/%s/main_Sp_PPV.pdf", nm_dir), 
        plot = pl, width = 8, height = 6)
 
 # Sup figure: seroprevalence vs. sero-incidence ---------------------------------------
@@ -136,7 +149,7 @@ pl_all <- pl1 + pl2 +
                           plot.tag = element_text(size = 12)) 
 print(pl_all)
 
-ggsave(filename = sprintf("_figures/%s/sup_Seroprev_Seroinc.pdf", nm_file), 
+ggsave(filename = sprintf("_figures/%s/sup_Seroprev_Seroinc.pdf", nm_dir), 
        plot = pl_all, width = 8, height = 6)
 
 # Sup figure: age distribution of cases -----------------------------------
@@ -164,7 +177,7 @@ pl <- ggplot(data = age_dist,
   labs(x = "Age group", y = "Incidence rate (per year per 100,000)", color = "")
 print(pl)
 
-ggsave(filename = sprintf("_figures/%s/sup_age_distribution.pdf", nm_file), 
+ggsave(filename = sprintf("_figures/%s/sup_age_distribution.pdf", nm_dir), 
        plot = pl, width = 8, height = 8)
 
 

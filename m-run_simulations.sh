@@ -16,7 +16,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=10000MB # memory in MB required by the job
-#SBATCH --time=00:30:00 # run time in h:m:s, up to 24h possible
+#SBATCH --time=00:20:00 # run time in h:m:s, up to 24h possible
  
 # --- start from a clean state and load necessary environment modules ---
 module purge

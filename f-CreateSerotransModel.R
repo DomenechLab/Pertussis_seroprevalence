@@ -93,9 +93,9 @@ CreateSerotransMod <- function(nA,
              params = params_vec,
              globals = components_l[["globs"]],
              rprocess = euler(step.fun = components_l[["stochSim"]], delta.t = dt_mod), 
-             rinit = NULL, 
-             cdir = "_help/", 
-             cfile = "codes"
+             rinit = NULL
+             #cdir = "_help/", 
+             #cfile = "codes"
   )
   return(po)
 }
