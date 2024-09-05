@@ -10,16 +10,16 @@ par(bty = "l", las = 1, lwd = 2)
 add_rugs <- F # Should rugs be added for every data point
 
 # Parameters of simulations to plot ---------------------------------------
-DV <- 10 # Average duration of vaccine-derived immunity (in years)
+DV <- 50 # Average duration of vaccine-derived immunity (in years)
 rhoV <- 0.25 # Boosting coefficient of vaccine-derived immunity
-DR <- 34 # Average duration of infection-derived immunity (in years)
-rhoR <- 6.6 # Boosting coefficient of infection-derived immunity
 vacCov <- 0.9 # Effective vaccine coverage
+DR <- 66 # Average duration of infection-derived immunity (in years)
+rhoR <- 0.66 # Boosting coefficient of infection-derived immunity
 n_doses <- 2 # No of vaccine doses
 nm_dir <- sprintf("DV_%.0f-rhoV_%.2f-DR_%.0f-rhoR_%.2f-vacCov_%.2f-%ddoses", DV, rhoV, DR, rhoR, vacCov, n_doses)
 stopifnot(dir.exists(sprintf("_saved/%s", nm_dir)))
 if(!dir.exists(sprintf("_figures/%s", nm_dir))) dir.create(sprintf("_figures/%s", nm_dir))
-dir.create(sprintf("_figures/%s/_all", nm_dir))
+if(!dir.exists(sprintf("_figures/%s/_all", nm_dir))) dir.create(sprintf("_figures/%s/_all", nm_dir))
 
 # Load simulations -------------------------------------------------------------
 l_files <- list.files(path = sprintf("_saved/%s", nm_dir), pattern = ".rds")
@@ -60,6 +60,7 @@ sims <- sims %>%
                               "65-79 yo" = "[65,Inf]"
          ))
 
+
 # Subset simulated data -------------------------------------------------------------
 sims_cur <- sims %>% 
   filter(time >= max(time) - 19, 
@@ -73,6 +74,28 @@ sims_sumry <- sims_cur %>%
   summarise(med_prop = median(prop), 
             med_n = median(n)) %>% 
   ungroup()
+
+# Print range of median Sp estimates
+tmp <- sims_cur %>% 
+  filter(var_nm == "seroPrev") %>% 
+  group_by(age_cat) %>% 
+  summarise(q_inf = quantile(prop, probs = 0.025), 
+            q_sup = quantile(prop, probs = 0.975)) %>% 
+  ungroup()
+
+print("Seroprevalence, 95% prediction interval")
+print(tmp %>% mutate(q_inf = round(100 * q_inf, 1), q_sup = round(100 * q_sup, 1)))
+
+# Print range of median PPV estimates
+tmp <- sims_cur %>% 
+  filter(var_nm == "seroPPV") %>% 
+  group_by(age_cat) %>% 
+  summarise(q_inf = quantile(n, probs = 0.025), 
+            q_sup = quantile(n, probs = 0.975)) %>% 
+  ungroup()
+
+print("PPV, 95% prediction interval")
+print(tmp %>% mutate(q_inf = round(100 * q_inf, 0), q_sup = round(100 * q_sup, 0)))
 
 # Order countries alphabetically
 country_order <- sort(levels(sims$country), decreasing = F)
@@ -103,7 +126,7 @@ pl <- ggplot(data = tmp,
   facet_wrap(~ var_nm, scales = "free_x", ncol = 2) + 
   scale_color_viridis(option = "viridis", discrete = T, end = 0.5, direction = -1) + 
   scale_fill_viridis(option = "viridis", discrete = T, end = 0.5, direction = -1) + 
-  labs(x = "Value (%)", y = "SCM country source", fill = "Age group", color = "") +
+  labs(x = "Value (%)", y = "SCM country", fill = "Age group", color = "") +
   theme_classic() + 
   theme(strip.background = element_blank(), 
         legend.position = "top", 
@@ -167,7 +190,7 @@ age_dist <- sims %>%
 
 pl <- ggplot(data = age_dist, 
              mapping = aes(x = age_cat, y = 1e5 * inc_mean, color = country, group = interaction(country, .id))) + 
-  geom_line(alpha = 1) + 
+  geom_line(alpha = 0.75) + 
   scale_color_brewer(palette = "Paired") + 
   facet_wrap(~ var_nm, nrow = 2, scales = "free") + 
   theme_classic() + theme(strip.background = element_blank(), 
@@ -178,6 +201,30 @@ pl <- ggplot(data = age_dist,
 print(pl)
 
 ggsave(filename = sprintf("_figures/%s/sup_age_distribution.pdf", nm_dir), 
+       plot = pl, width = 8, height = 8)
+
+# Sup figure: Sp breakdown: Vp, Rp1, and Rp2 -------------------------------------
+tmp <- sims %>% 
+  filter(time >= max(time) - 19, 
+         var_nm %in% c("Rp1", "Rp2", "Vp"), 
+         age_cat %in% c("25-44 yo", "45-64 yo", "65-79 yo")) %>% 
+  mutate(prop = n / pop, 
+         var_nm = factor(var_nm, levels = c("Vp", "Rp2", "Rp1"))) %>% 
+  group_by(country, age_cat, var_nm) %>% 
+  summarise(prop = mean(prop)) %>% 
+  ungroup()
+
+pl <- ggplot(data = tmp %>% filter(country == "USA"), 
+             mapping = aes(x = age_cat, y = prop, fill = var_nm)) + 
+  geom_col(position = "fill") + 
+  theme_classic() + 
+  scale_fill_manual(values = c("#fbb4ae", "#fed9a6", "#b3cde3"), 
+                    labels = c("Immune boost, vaccinated (Vp)", "Immune boost, recovered (Rp2)", "True infection (Rp1)")) + 
+  theme(legend.position = "top") + 
+  labs(x = "Age group", y = "Proportion (relative to seroprevalence)", fill = "") 
+print(pl)
+
+ggsave(filename = sprintf("_figures/%s/sup_Sp_breakdown.pdf", nm_dir), 
        plot = pl, width = 8, height = 8)
 
 

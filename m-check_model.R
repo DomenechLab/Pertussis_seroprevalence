@@ -30,25 +30,63 @@ alpha_V_val <- 0.02 # Waning rate of infection-derived immunity
 contact_data <- "Mistry" # Source for contact data, either "Mistry" (85 1-yr groups, age 0 to 84) or "Prem" (16 5-yr age groups, age 0-4 to 75-79)
 stopifnot(contact_data %in% c("Mistry", "Prem"))
 print(country_nm)
-
-# Set demographic parameters ----------------------------------------------
-# As in Mistry et al., stratification in 1-yr age groups, from age 0 to age 79 (80 age groups overall) 
-# Stratify age 0 into two subgroups for the primary vaccination course 
-Ntot_val <- 1e7 # Total population size
-b_rate <- 1 / 80 # Birth rate (per year)
+demog_type <- "type1" # Type of demographic structure: "empirical" (based on actual data) or "type1" (type-I mortality, synthetic population) 
+stopifnot(demog_type %in% c("empirical", "type1"))
 nA <- 81 # No of age groups
+delta_vec_type1 <- 1 / c(6 / 12, 6 / 12, rep(1, nA - 2)) # Aging rates for type I mortality
 
-delta_vec <- 1 / c(6 / 12, 6 / 12, rep(1, nA - 2)) # Aging rates
-N_vec <- b_rate / delta_vec * Ntot_val # Age-specific population sizes
-stopifnot(all.equal(sum(N_vec), Ntot_val))
+# Set demographic parameters, based on real demographic data ---------------------------------------------------
+# Stratify age 0 into two subgroups for the primary vaccination course 
 
-# Data frame wti age bounds
-age_df <- data.frame(age_fac = 1:nA, age_max = cumsum(1 / delta_vec)) %>% 
+if(demog_type == "empirical") {
+  demog_dat <- read_csv(file = sprintf("_data/_demog/_2010/%s_country_level_age_distribution_85.csv", country_nm), 
+                        col_names = c("age", "pop"), 
+                        col_types = "d") %>% 
+    arrange(age) %>% 
+    filter(age <= 79)
+  
+  # Population sizes
+  Ntot_val <- sum(demog_dat$pop) # Total population size
+  N_vec <- c(demog_dat$pop[1] / delta_vec_type1[1], demog_dat$pop[1] / delta_vec_type1[2],  demog_dat$pop[-1]) # Age-specific population sizes
+  b_rate <- 13e-3 # Birth rate (per year)
+  
+  # Aging rates
+  delta_vec <- numeric(nA)
+  delta_vec[1] <- b_rate * Ntot_val / N_vec[1]
+  delta_vec[-1] <- delta_vec[1] * N_vec[1] / N_vec[-1]
+  
+  stopifnot(length(N_vec) == nA)
+  stopifnot(all.equal(sum(N_vec), Ntot_val))
+  
+  # Plots
+  pl <- ggplot(data = demog_dat, mapping = aes(x = age, y = pop / 1e6)) + 
+    geom_col() + 
+    labs(x = "Age (yr)", y = "Population (millions)", title = "Empirical population sizes")
+  print(pl)
+  
+  barplot(delta_vec, main = "Aging/mortality rates", xlab = "Age (yr)", ylab = "Rate (per yr)")
+}
+
+# Set demographic parameters, type I mortality in synthetic populations ----------------------------------------------
+# As in Mistry et al., stratification in 1-yr age groups, from age 0 to age 79 (80 age groups overall) 
+
+if(demog_type == "type1") {
+  Ntot_val <- 1e7 # Total population size
+  b_rate <- 1 / (nA - 1) # Birth rate (per year)
+  
+  delta_vec <- delta_vec_type1 # Aging rates
+  N_vec <- b_rate / delta_vec * Ntot_val # Age-specific population sizes
+  stopifnot(all.equal(sum(N_vec), Ntot_val))
+  demog_dat <- data.frame(age = 0:(nA - 2), pop = c(sum(N_vec[1:2]), N_vec[-c(1:2)]))
+}
+
+# Define age group --------------------------------------------------------
+age_df <- data.frame(age_fac = 1:nA, age_max = cumsum(1 / delta_vec_type1)) %>% 
   mutate(age_min = c(0, age_max[-length(age_max)]), 
          age_mid = (age_min + age_max) / 2) %>% 
   select(age_fac, age_min, age_mid, age_max)
 
-age_breaks <- c(0, age_df$age_min[2], 1, 5, 10, 20, 40, 60, Inf)
+age_breaks <- c(0, age_df$age_min[2], 1, 5, 10, 15, 20, 25, 45, 65, Inf)
 
 # Add factor age groups: 0-3 mo, 4-11 mo, 1-4 yr, 5-9 yr, 10-19 yr, 20-39 yr, 40-59 yr, >=60 yr
 age_df$age_cat <- cut(age_df$age_min, 
@@ -105,6 +143,10 @@ coef(seroMod, names(parms)) <- unname(parms)
 coef(seroMod, c("rho_R", "alpha_R")) <- c(6.6, 1 / 34)
 coef(seroMod, c("p_V_2", "p_V_3")) <- c(vac_cov, vac_cov - 0.1) # Vaccinate second and third age group
 coef(seroMod, c("alpha_V", "rho_V")) <- c(alpha_V_val, rho_V_val) # Vaccinate second age group
+coef(seroMod, c("q1", "q21", "q32")) <- unname(parms[c("q1", "q21", "q32")])
+#coef(seroMod, c("q1", "q21", "q32")) <- c(0.06275231, 0.5729266, 0.2129067)
+
+print(coef(seroMod, c("alpha_V", "rho_V", "alpha_R", "rho_R", "p_V_1", "p_V_2", "p_V_3")))
 
 sim_test <- simulate(seroMod, nsim = n_sims, format = "data.frame")
 
@@ -133,7 +175,7 @@ R0_val <- NGM %>% eigen() %>% pluck("values") %>% abs() %>% max()
 MAI <- sim_cur %>% 
   filter(var_nm == "Ci1") %>% 
   group_by(time) %>% 
-  summarise(MAI = sum(age_mid * n) / sum(n)) %>% 
+  summarise(MAI = sum(age_mid * n / pop) / sum(n / pop)) %>% 
   ungroup() %>% 
   filter(time >= 50)
 
@@ -181,17 +223,25 @@ print(pl)
 # Check population sizes for all age groups -------------------------------------------------------------
 df_cur <- sims_list[["all_ages"]] %>% 
   filter(.id == id_cur) %>%  
-  select(time, age_mid, pop) %>% 
+  select(time, age_min, pop) %>% 
   unique()
 
 # Population size (age-specific)
 pl <- ggplot(data = df_cur, 
-             mapping = aes(x = time, y = pop, color = age_mid, group = age_mid)) + 
+             mapping = aes(x = time, y = pop, color = age_min, group = age_min)) + 
   geom_line() + 
   theme_classic() + 
   scale_color_viridis(option = "magma", direction = -1) + 
   labs(x = "Time (years)", y = "Count") + 
   ggtitle("Population sizes (age-specific)")
+print(pl)
+
+# Population pyramid
+pl <- ggplot(data = df_cur, mapping = aes(x = age_min, y = pop / 1e6, group = age_min)) + 
+  geom_boxplot() + 
+  geom_point(data = demog_dat, 
+             mapping = aes(x = age, y = pop / 1e6, group = NULL), color = "red") + 
+  labs(x = "Age (years)", y = "Population size (millions)", title = "Simulated vs. observed (red) population")
 print(pl)
 
 df_cur2 <- df_cur %>% 

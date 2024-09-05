@@ -26,7 +26,8 @@ CreateContactMatrix <- function(country_nm, Nvec, source_dat, trim_mat = T, debu
     
     if(trim_mat) M_mat <- M_mat[-c(81:85), -c(81:85)]
     
-    N_tar <- rep(sum(Nvec) / ncol(M_mat), ncol(M_mat)) 
+    #N_tar <- rep(sum(Nvec) / ncol(M_mat), ncol(M_mat)) 
+    N_tar <- c(sum(Nvec[1:2]), Nvec[-c(1:2)])
     f_map <- function(i) ifelse(i <= 2, 1, i - 1) # Mapping function
   } else if(source_dat == "Prem") {
     

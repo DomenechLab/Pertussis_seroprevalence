@@ -23,10 +23,7 @@ path_dat <- "_data/_contact_matrices/Mistry_2021/"
 l_files <- list.files(path = path_dat)
 
 # Extract names of countries
-country_nm <- map_chr(.x = l_files, .f = \(x) str_split_i(string = x, pattern = "_", i = 1))
-country_nm[country_nm == "United"] <- "United-States"
-country_nm[country_nm == "South"] <- "South-Africa"
-
+country_nm <- map_chr(.x = l_files, .f = \(x) str_extract(string = x, pattern = "^(.*?)(?=_country_level)"))
 dat_SCM <- vector(mode = "list", length = length(l_files))
 names(dat_SCM) <- country_nm
 
@@ -39,8 +36,16 @@ for(i in seq_along(l_files)) {
   # Remove age groups 80-84 yr
   dat_SCM[[i]] <- dat_SCM[[i]][-c(81:85), -c(81:85)]
   
+  # Extract empirical data 
+  demog_dat <- read_csv(file = sprintf("_data/_demog/_2010/%s_country_level_age_distribution_85.csv", country_nm[i]), 
+                        col_names = c("age", "pop"), 
+                        col_types = "d") %>% 
+    arrange(age) %>% 
+    filter(age <= 79)
+  stopifnot(nrow(demog_dat) == 80)
+  
   # Project to model population structure 
-  N_vec <- rep(1e7 / 80, 80)
+  N_vec <- demog_dat$pop
   dat_SCM[[i]] <- Project_M(M = dat_SCM[[i]], N_tar = N_vec)
 }
 
@@ -48,7 +53,6 @@ PlotMatrix(M_in = dat_SCM[["France"]], plot_title = "")
 
 # Plot degree distribution ------------------------------------------------
 c_names <- read.table(file = "_data/list_countries.txt") %>% pluck(1)
-c_names[c_names == "United_States"] <- "United-States"
 dat_SCM_sub <- dat_SCM[c_names]
 
 n_ages <- ncol(dat_SCM[[1]]) # No of age groups
@@ -95,7 +99,7 @@ deg_dist_sum <- deg_dist %>%
   mutate(assort_r = map_dbl(.x = dat_SCM_sub, .f = \(x) r_Newman(x)))
 
 # Estimate age with peak contacts using a GAM -----------------------------
-c_name <- "United-States"
+c_name <- "United_States"
 
 dd <- deg_dist %>% 
   filter(country == c_name, age <= 30) %>% 
@@ -171,7 +175,7 @@ fviz_dend(x = cl_hc, k = 10, type = "phylogenic")
 fviz_dend(x = cl_hc, k = 10, type = "rectangle", horiz = F)
 
 # PAM algorithm
-cl_pam <- pam(x = dist_mat, k = 11, diss = T)
+cl_pam <- pam(x = dist_mat, k = 10, diss = T)
 
 # Cluster by age with contiguity constraints ------------------------------
 # dat_age <- dat_SCM[["United-States"]]
