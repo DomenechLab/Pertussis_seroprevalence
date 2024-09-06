@@ -30,7 +30,7 @@ alpha_V_val <- 0.02 # Waning rate of infection-derived immunity
 contact_data <- "Mistry" # Source for contact data, either "Mistry" (85 1-yr groups, age 0 to 84) or "Prem" (16 5-yr age groups, age 0-4 to 75-79)
 stopifnot(contact_data %in% c("Mistry", "Prem"))
 print(country_nm)
-demog_type <- "type1" # Type of demographic structure: "empirical" (based on actual data) or "type1" (type-I mortality, synthetic population) 
+demog_type <- "empirical" # Type of demographic structure: "empirical" (based on actual data) or "type1" (type-I mortality, synthetic population) 
 stopifnot(demog_type %in% c("empirical", "type1"))
 nA <- 81 # No of age groups
 delta_vec_type1 <- 1 / c(6 / 12, 6 / 12, rep(1, nA - 2)) # Aging rates for type I mortality
@@ -138,13 +138,14 @@ state_vars_nm <- c("S1", "S2", "E1", "E2", "I1",
 accum_vars_nm <- c("Ci1", "Ci2", "Cs")
 
 # Run test simulation -----------------------------------------------------
-vac_cov <- 0.95
+vac_cov <- 0.9
 coef(seroMod, names(parms)) <- unname(parms)
 coef(seroMod, c("rho_R", "alpha_R")) <- c(6.6, 1 / 34)
 coef(seroMod, c("p_V_2", "p_V_3")) <- c(vac_cov, vac_cov - 0.1) # Vaccinate second and third age group
 coef(seroMod, c("alpha_V", "rho_V")) <- c(alpha_V_val, rho_V_val) # Vaccinate second age group
 coef(seroMod, c("q1", "q21", "q32")) <- unname(parms[c("q1", "q21", "q32")])
-#coef(seroMod, c("q1", "q21", "q32")) <- c(0.06275231, 0.5729266, 0.2129067)
+#coef(seroMod, c("q1", "q21", "q32")) <- c(0.05052322, 0.5042108, 0.2072689)
+coef(seroMod, "q1") <- 0.77 * unname(parms["q1"])
 
 print(coef(seroMod, c("alpha_V", "rho_V", "alpha_R", "rho_R", "p_V_1", "p_V_2", "p_V_3")))
 

@@ -18,18 +18,25 @@ theme_set(theme_bw())
 par(bty = "l", las = 1, lwd = 2)
 print(packageVersion("pomp"))
 
-# Set parameters ----------------------------------------------------
-run_clust <- T
+# Set fixed parameters ----------------------------------------------------
+run_clust <- F
 
 dt_sim <- 1 # Time step separating simulated data points 
 dt_mod <- 1e-3 # Time step for stochastic model simulator
-n_sims <- 10 # No of stochastic simulations 
+n_sims <- 1 # No of stochastic simulations 
 n_years_sim <- 300 # No of years of simulations (NB: vaccine is introduced at year 150)
 n_years_end <- 20 # No of years to consider at the end of the simulation
 ages_to_vac <- c(2, 3) # Indices of ages to vaccinate
 
+# SCM data
 contact_data <- "Mistry" # Source for contact data, either "Mistry" (85 1-yr groups, age 0 to 84) or "Prem" (16 5-yr age groups, age 0-4 to 75-79)
 stopifnot(contact_data %in% c("Mistry", "Prem"))
+
+# Demography
+demog_type <- "empirical" # Type of demographic structure: "empirical" (based on actual data) or "type1" (type-I mortality, synthetic population) 
+stopifnot(demog_type %in% c("empirical", "type1"))
+nA <- 81 # No of age groups
+delta_vec_type1 <- 1 / c(6 / 12, 6 / 12, rep(1, nA - 2)) # Aging rates for type I mortality
 
 # Set control parameters --------------------------------------------------
 if(run_clust) {
@@ -41,9 +48,9 @@ if(run_clust) {
   vac_cov_prim <- as.numeric(Sys.getenv("V_COV")); print(vac_cov_prim)
   
 } else {
-  country_nm <- "Israel"
+  country_nm <- "United_States"
   rho_V_val <- 0.25 # Immune boosting coefficient (from V state)
-  alpha_V_val <- 0.1 # Waning rate of vaccine-derived immunity (per year)
+  alpha_V_val <- 0.02 # Waning rate of vaccine-derived immunity (per year)
   rho_R_val <- 6.6 # Immune boosting coefficient (from R state)
   alpha_R_val <- 1 / 34 # Waning rate of infection-derived immunity (per year)
   vac_cov_prim <- 0.9 # Vaccine coverage from primary series (NB: for boosters, coverage is assumed 10% lower) 
@@ -54,19 +61,49 @@ nm_file_save <- sprintf("_outputs_cluster/saved/%s-DV_%.0f-rhoV_%.2f-DR_%.0f-rho
                         country_nm, 1 / alpha_V_val, rho_V_val, 1 / alpha_R_val, rho_R_val, vac_cov_prim, length(ages_to_vac))
 pdf(file = paste0(nm_file_save, ".pdf"), width = 12, height = 8)
 
-# Set demographic parameters ----------------------------------------------
-# As in Mistry et al., stratification in 1-yr age groups, from age 0 to age 79 (80 age groups overall) 
+# Set demographic parameters, based on real demographic data ---------------------------------------------------
 # Stratify age 0 into two subgroups for the primary vaccination course 
-Ntot_val <- 1e7 # Total population size
-b_rate <- 1 / 80 # Birth rate (per year)
-nA <- 81 # No of age groups
 
-delta_vec <- 1 / c(6 / 12, 6 / 12, rep(1, nA - 2)) # Aging rates
-N_vec <- b_rate / delta_vec * Ntot_val # Age-specific population sizes
-stopifnot(all.equal(sum(N_vec), Ntot_val))
+if(demog_type == "empirical") {
+  demog_dat <- read_csv(file = sprintf("_data/_demog/_2010/%s_country_level_age_distribution_85.csv", country_nm), 
+                        col_names = c("age", "pop"), 
+                        col_types = "d") %>% 
+    arrange(age) %>% 
+    filter(age <= 79)
+  
+  # Population sizes
+  Ntot_val <- sum(demog_dat$pop) # Total population size
+  N_vec <- c(demog_dat$pop[1] / delta_vec_type1[1], demog_dat$pop[1] / delta_vec_type1[2],  demog_dat$pop[-1]) # Age-specific population sizes
+  b_rate <- 13e-3 # Birth rate (per year)
+  
+  # Birth rate
+  b_rate <- read_csv2(file = "_data/_demog/birth_rates_2010.csv", col_names = T, col_types = "cd")
+  b_rate <- b_rate$birth_rate[b_rate$country == country_nm] / 1e3
+  stopifnot(length(b_rate) == 1 && is.numeric(b_rate))
+  
+  # Aging rates
+  delta_vec <- numeric(nA)
+  delta_vec[1] <- b_rate * Ntot_val / N_vec[1]
+  delta_vec[-1] <- delta_vec[1] * N_vec[1] / N_vec[-1]
+  
+  stopifnot(length(N_vec) == nA)
+  stopifnot(all.equal(sum(N_vec), Ntot_val))
+}
 
+# Set demographic parameters, type I mortality in synthetic populations ----------------------------------------------
+if(demog_type == "type1") {
+  Ntot_val <- 1e7 # Total population size
+  b_rate <- 1 / (nA - 1) # Birth rate (per year)
+  
+  delta_vec <- delta_vec_type1 # Aging rates
+  N_vec <- b_rate / delta_vec * Ntot_val # Age-specific population sizes
+  stopifnot(all.equal(sum(N_vec), Ntot_val))
+  demog_dat <- data.frame(age = 0:(nA - 2), pop = c(sum(N_vec[1:2]), N_vec[-c(1:2)]))
+}
+
+# Define age groups ----------------------------------------------
 # Data frame with age bounds
-age_df <- data.frame(age_fac = 1:nA, age_max = cumsum(1 / delta_vec)) %>% 
+age_df <- data.frame(age_fac = 1:nA, age_max = cumsum(1 / delta_vec_type1)) %>% 
   mutate(age_min = c(0, age_max[-length(age_max)]), 
          age_mid = (age_min + age_max) / 2) %>% 
   select(age_fac, age_min, age_mid, age_max)
@@ -116,12 +153,15 @@ for(i in seq_along(ages_to_vac)) {
   parms[paste0("p_V_", ages_to_vac[i])] <- ifelse(i == 1, vac_cov_prim, vac_cov_prim - 0.1)
 }
 
+parms["q1"] <- 0.77 * parms["q1"]
+
 stopifnot(all(parms >=0))
 
 # Check initial conditions
 coef(seroMod, names(parms)) <- unname(parms)
 x0 <- rinit(seroMod)
 stopifnot(all.equal(sum(x0), Ntot_val))
+print(sprintf("Country: %s, Ntot = %.1fM, b_rate=%.3f per yr", country_nm, Ntot_val / 1e6, b_rate))
 print(coef(seroMod, c("alpha_V", "rho_V", "alpha_R", "rho_R", "p_V_1", "p_V_2", "p_V_3")))
 
 # Names of state variables
@@ -151,7 +191,7 @@ for(s in vars_checks) {
                mapping = aes(x = time, y = age_fac, fill = n / pop)) + 
     geom_tile() + 
     scale_fill_viridis(option = "magma", direction = -1) + 
-    labs(x = "Time (years)", y = "Age", fill = "Proportion/Rate", title = s)
+    labs(x = "Time (years)", y = "Age", fill = "Proportion/Rate", title = paste0(country_nm, ", ", s))
   print(pl)
 }
 
@@ -160,15 +200,24 @@ id_check <- 1
 
 pop_checks <- sims_all %>% 
   filter(.id == id_check) %>% 
-  select(time, age_mid, pop) %>% 
+  select(time, age_min, pop) %>% 
   unique()
 
+# Population over time
 pl <- ggplot(data = pop_checks, 
-             mapping = aes(x = time, y = pop / Ntot_val, color = age_mid, group = age_mid)) + 
+             mapping = aes(x = time, y = pop / Ntot_val, color = age_min, group = age_min)) + 
   geom_line() + 
   theme_classic() + 
   scale_color_viridis(option = "magma", direction = -1) + 
-  labs(x = "Time (years)", y = "Count")
+  labs(x = "Time (years)", y = "Count", title = paste0(country_nm, ", Population over time (all age groups)"))
+print(pl)
+
+# Population pyramid
+pl <- ggplot(data = pop_checks, mapping = aes(x = age_min, y = pop / 1e6, group = age_min)) + 
+  geom_boxplot() + 
+  geom_point(data = demog_dat, 
+             mapping = aes(x = age, y = pop / 1e6, group = NULL), color = "red") + 
+  labs(x = "Age (years)", y = "Population size (millions)", title = paste0(country_nm, ", Population pyramid (red: data)"))
 print(pl)
 
 pop_checks <- sims_agg %>% 
@@ -181,7 +230,7 @@ pl <- ggplot(data = pop_checks,
   geom_line() + 
   theme_classic() + 
   scale_color_viridis(option = "magma", direction = -1, discrete = T) + 
-  labs(x = "Time (years)", y = "Count")
+  labs(x = "Time (years)", y = "Count", title = paste0(country_nm, ", Population over time (aggregated age groups)"))
 print(pl)
 
 # Calculate mean age at first infection (pre-vaccine era) -----------------------------------
@@ -281,7 +330,7 @@ pl <- ggplot(data = tmp %>% filter(var_nm == "seroPrev"),
   geom_text(mapping = aes(x = 1e2 * med_prop, y = age_cat, label = round(1e2 * med_prop, 1)), 
             data = tmp_sumry %>% filter(var_nm == "seroPrev"), 
             color = "red") + 
-  labs(x = "Seroprevalence (%)", y = "Age group", title = "Seroprevalence") +
+  labs(x = "Seroprevalence (%)", y = "Age group", title = paste0(country_nm, ", Seroprevalence")) +
   theme_classic()
 print(pl)
 
@@ -297,7 +346,7 @@ pl <- ggplot(data = tmp %>% filter(var_nm == "seroPPV"),
   geom_text(mapping = aes(x = 1e2 * med_n, y = age_cat, label = round(1e2 * med_n, 1)), 
             data = tmp_sumry %>% filter(var_nm == "seroPPV"), 
             color = "red") + 
-  labs(x = "PPV of serology", y = "Age group", title = "PPV") +
+  labs(x = "PPV of serology", y = "Age group", title = paste0(country_nm, ", PPV")) +
   theme_classic()
 print(pl)
 
@@ -314,7 +363,7 @@ pl <- ggplot(data = tmp %>% filter(var_nm %in% c("seroInc", "trueInc")),
             data = tmp_sumry %>% filter(var_nm %in% c("seroInc", "trueInc"))) + 
   labs(x = "Incidence rate (per year per 100,000)", 
        y = "Age group",
-       title = "Incidence") +
+       title = paste0(country_nm, ", Incidence")) +
   scale_x_log10() + 
   theme_classic()
 print(pl)
