@@ -24,10 +24,9 @@ CreateContactMatrix <- function(country_nm, Nvec, source_dat, trim_mat = T, debu
                       col_names = F, 
                       show_col_types = F)
     
-    if(trim_mat) M_mat <- M_mat[-c(81:85), -c(81:85)]
+    if(trim_mat) M_mat <- M_mat[-c(81:85), -c(81:85)] # Trimmed matrix has dimension 80x80
     
-    #N_tar <- rep(sum(Nvec) / ncol(M_mat), ncol(M_mat)) 
-    N_tar <- c(sum(Nvec[1:2]), Nvec[-c(1:2)])
+    N_tar <- c(sum(Nvec[1:2]), Nvec[-c(1:2)]) # Vector of length 80
     f_map <- function(i) ifelse(i <= 2, 1, i - 1) # Mapping function
   } else if(source_dat == "Prem") {
     

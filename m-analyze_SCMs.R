@@ -7,6 +7,7 @@ source("s-base_packages.R")
 source("f-Project_M.R")
 source("f-Upsize_M.R")
 source("f-PlotMatrix.R")
+source("f-compute_R0.R")
 library(cluster)
 library(factoextra)
 library(NbClust)
@@ -26,6 +27,8 @@ l_files <- list.files(path = path_dat)
 country_nm <- map_chr(.x = l_files, .f = \(x) str_extract(string = x, pattern = "^(.*?)(?=_country_level)"))
 dat_SCM <- vector(mode = "list", length = length(l_files))
 names(dat_SCM) <- country_nm
+dat_pop <- matrix(data = 0, nrow = 80, ncol = length(country_nm), 
+                  dimnames = list(as.character(0:79), country_nm))
 
 for(i in seq_along(l_files)) {
   file_cur <- l_files[i] # Current file
@@ -47,9 +50,66 @@ for(i in seq_along(l_files)) {
   # Project to model population structure 
   N_vec <- demog_dat$pop
   dat_SCM[[i]] <- Project_M(M = dat_SCM[[i]], N_tar = N_vec)
+  dat_pop[, country_nm[i]] <- N_vec
 }
 
 PlotMatrix(M_in = dat_SCM[["France"]], plot_title = "")
+
+# Next-generation matrices ------------------------------------------------
+dat_NGM <- vector(mode = "list", length = length(l_files))
+names(dat_NGM) <- country_nm
+
+# Transmission parameters
+q1_val <- 0.09373881
+q2_val <- 0.5117505 * q1_val
+q3_val <- 0.1725993 * q2_val
+theta_val <- 0.9874919
+gamma_val <- 365 / 15
+q_vec <- c(rep(q1_val, 10), rep(q2_val, 10), rep(q3_val, 60))
+
+for(i in seq_along(dat_NGM)) {
+  nm_cur <- names(dat_NGM)[i]
+  
+  # Birth rate
+  b_rate <- read_csv2(file = "_data/_demog/birth_rates_2010.csv", col_names = T, col_types = "cd")
+  b_rate <- b_rate$birth_rate[b_rate$country == nm_cur] / 1e3
+  stopifnot(length(b_rate) == 1 && is.numeric(b_rate))
+  
+  # Aging rates
+  delta_vec <- numeric(80)
+  N_vec <- dat_pop[, nm_cur]
+  Ntot_val <- sum(N_vec)
+  delta_vec[1] <- b_rate * Ntot_val / N_vec[1]
+  delta_vec[-1] <- delta_vec[1] * N_vec[1] / N_vec[-1]
+  
+  print(sprintf("Country: %s, Ntot = %.1fM, b_rate=%.3f per yr", nm_cur, Ntot_val / 1e6, b_rate))
+  
+  # NGM 
+  dat_NGM[[nm_cur]] <- compute_R0(theta = theta_val, 
+                                  gamma = gamma_val, 
+                                  N = N_vec, 
+                                  q = q_vec, 
+                                  delta = delta_vec, 
+                                  Cmat = 365 * dat_SCM[[nm_cur]], 
+                                  type = "SIR")
+}
+
+R0_vec <- map_dbl(.x = dat_NGM, .f = \(x) x %>% eigen() %>% pluck("values") %>% abs() %>% max())
+
+# Plot demographic structure ----------------------------------------------
+dat_pop_long <- reshape2::melt(dat_pop, value.name = "pop")
+dat_pop_long <- dat_pop_long %>% 
+  rename("country" = "Var2", "age" = "Var1") %>% 
+  select(country, age, pop) %>% 
+  group_by(country) %>% 
+  mutate(pop_frac = pop / sum(pop)) %>% 
+  ungroup()
+
+pl <- ggplot(data = dat_pop_long, 
+             mapping = aes(x = age, y = pop_frac, group = country)) + 
+  geom_line(color = "grey", alpha = 1) + 
+  labs(x = "Age (years)", y = "Relative population")
+print(pl)
 
 # Plot degree distribution ------------------------------------------------
 c_names <- read.table(file = "_data/list_countries.txt") %>% pluck(1)
@@ -94,7 +154,7 @@ deg_dist_sum <- deg_dist %>%
             mean_r_cont = mean(r_cont), 
             sd_r_cont = sd(r_cont), 
             max_r_cont = max(r_cont)
-            ) %>% 
+  ) %>% 
   ungroup() %>% 
   mutate(assort_r = map_dbl(.x = dat_SCM_sub, .f = \(x) r_Newman(x)))
 
@@ -127,7 +187,9 @@ age_max <- fs %>%
 print(quantile(age_max$age_max, probs = c(0.025, 0.5, 0.975)))
 
 # Put data in matrix format for clustering (row: country) --------------------------------
-dat_SCM_mat <- dat_SCM %>% 
+dat_cur <- dat_NGM
+
+dat_cur_mat <- dat_cur %>% 
   map(.f = \(x) as.numeric(x)) %>% 
   bind_rows() %>% 
   t()
@@ -136,32 +198,33 @@ dat_SCM_mat <- dat_SCM %>%
 
 # Visualize dissimilarity matrix
 dist_nm <- "manhattan" # Name of distance measure
-dist_mat <- get_dist(x = dat_SCM_mat, method = dist_nm, stand = F)
-fviz_dist(dist.obj = dist_mat)
+dist_mat <- get_dist(x = dat_cur_mat, method = dist_nm, stand = F)
+fviz_dist(dist.obj = dist_mat, gradient = list(high = "#08306b", mid = "#6baed6", low = "#f7fbff"))
 
 # Tried to run this, but it took too long 
-# nb <- NbClust(data = dat_SCM_mat, 
-#               distance = "canberra", 
-#               diss = NULL, 
-#               min.nc = 5, 
-#               max.nc = 15,  
+# nb <- NbClust(data = dat_cur_mat,
+#               diss = dist_mat,
+#               distance = NULL,
+#               index = 'silhouette', 
+#               min.nc = 5,
+#               max.nc = 15,
 #               method = "ward.D2")
 
 # For the silhouette method, both pam and hclust suggest an optimal no of 10
-nb <- clValid(obj = dat_SCM_mat, 
+nb <- clValid(obj = dat_cur_mat, 
               metric = dist_nm,
-              nClust = 5:20, 
-              clMethods = c("hierarchical", "pam"), 
+              nClust = 5:16, 
+              clMethods = c("hierarchical", "agnes", "diana", "fanny", "clara", "pam"), 
               validation = "internal", 
               method = "ward")
 print(summary(nb))
 
 # Other function to determine optimal no of clusters
-fviz_nbclust(x = dat_SCM_mat, 
+fviz_nbclust(x = dat_cur_mat, 
              #FUNcluster = pam, 
              FUNcluster = hcut, 
              diss = dist_mat, 
-             #method = "gap_stat", 
+             #method = "wss", 
              method = "silhouette", 
              k.max = 20, 
              nboot = 50)
@@ -170,12 +233,15 @@ fviz_nbclust(x = dat_SCM_mat,
 
 # Hierarchical clustering
 cl_hc <- hclust(d = dist_mat, method = "ward.D2")
-plot(cl_hc)
-fviz_dend(x = cl_hc, k = 10, type = "phylogenic")
-fviz_dend(x = cl_hc, k = 10, type = "rectangle", horiz = F)
+cl_agnes <- cluster::agnes(x = dist_mat, diss = T, metric = dist_nm, stand = F, method = "ward")
+cl_which <- cl_agnes
+k_which <- 12
+
+fviz_dend(x = cl_which, k = k_which, type = "phylogenic", k_colors = "npg")
+fviz_dend(x = cl_which, k = k_which, type = "rectangle", k_colors = "npg")
 
 # PAM algorithm
-cl_pam <- pam(x = dist_mat, k = 10, diss = T)
+#cl_pam <- pam(x = dist_mat, k = 5, diss = T)
 
 # Cluster by age with contiguity constraints ------------------------------
 # dat_age <- dat_SCM[["United-States"]]

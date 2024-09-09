@@ -2,7 +2,7 @@
 # Compute R0 for the age-structured model at the disease-free equilibrium without vaccination
 #######################################################################################################
 
-compute_R0 <- function(q, alphaV = 0, epsilonV = 0, theta, v1 = 0, epsA = 0, N, delta, Cmat, gamma) {
+compute_R0 <- function(q, alphaV = 0, epsilonV = 0, theta, v1 = 0, epsA = 0, N, delta, Cmat, gamma, type = "SIR") {
   # Args:
   # q: susceptibility factor
   # alphaV: waning rate, per year
@@ -14,8 +14,10 @@ compute_R0 <- function(q, alphaV = 0, epsilonV = 0, theta, v1 = 0, epsA = 0, N, 
   # delta: vector of aging rates, per year
   # Cmat: contact rate matrix (per year)
   # gamma: recovery rate
+  # type: "SIR", basic model with no repeat infection, or "S2I2R" with repeat infections
   # Returns: next generation matrix
   
+  stopifnot(type %in% c("SIR", "S2I2R"))
   kron <- function(i, j) return(ifelse(i == j, 1, 0)) # Kronecker delta function
   N <- unname(N)
   nA <- length(N)
@@ -51,6 +53,11 @@ compute_R0 <- function(q, alphaV = 0, epsilonV = 0, theta, v1 = 0, epsA = 0, N, 
   Vmat <- rbind(cbind(V11, V12), cbind(V21, V22))
   
   # Next-generation matrix
-  G <- Fmat %*% solve(Vmat)
+  if(type == "SIR") {
+    G <- F11 %*% solve(V11)
+  } else {
+    G <- Fmat %*% solve(Vmat)
+  }
+
   return(G)
 }
