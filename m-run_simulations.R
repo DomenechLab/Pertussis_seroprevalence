@@ -19,14 +19,16 @@ par(bty = "l", las = 1, lwd = 2)
 print(packageVersion("pomp"))
 
 # Set fixed parameters ----------------------------------------------------
-run_clust <- F
+run_clust <- T
 
 dt_sim <- 1 # Time step separating simulated data points 
 dt_mod <- 1e-3 # Time step for stochastic model simulator
-n_sims <- 1 # No of stochastic simulations 
+n_sims <- 10 # No of stochastic simulations 
 n_years_sim <- 300 # No of years of simulations (NB: vaccine is introduced at year 150)
 n_years_end <- 20 # No of years to consider at the end of the simulation
-ages_to_vac <- c(2, 3) # Indices of ages to vaccinate
+ages_to_vac <- c(2, 3, 7) # Indices of ages to vaccinate (age = index - 2)
+vac_cov <- c(0.90, 0.90, 0.80) # Age-specific effective vaccine coverage 
+stopifnot(length(ages_to_vac) == length(vac_cov))
 
 # SCM data
 contact_data <- "Mistry" # Source for contact data, either "Mistry" (85 1-yr groups, age 0 to 84) or "Prem" (16 5-yr age groups, age 0-4 to 75-79)
@@ -36,7 +38,7 @@ stopifnot(contact_data %in% c("Mistry", "Prem"))
 demog_type <- "empirical" # Type of demographic structure: "empirical" (based on actual data) or "type1" (type-I mortality, synthetic population) 
 stopifnot(demog_type %in% c("empirical", "type1"))
 nA <- 81 # No of age groups
-delta_vec_type1 <- 1 / c(6 / 12, 6 / 12, rep(1, nA - 2)) # Aging rates for type I mortality
+delta_vec_type1 <- 1 / c(2 / 12, 10 / 12, rep(1, nA - 2)) # Aging rates for type I mortality
 
 # Set control parameters --------------------------------------------------
 if(run_clust) {
@@ -45,15 +47,16 @@ if(run_clust) {
   alpha_V_val <- 1 / as.numeric(Sys.getenv("D_V")); print(alpha_V_val)
   rho_R_val <- as.numeric(Sys.getenv("RHO_R")); print(rho_R_val)
   alpha_R_val <- 1 / as.numeric(Sys.getenv("D_R")); print(alpha_R_val)
-  vac_cov_prim <- as.numeric(Sys.getenv("V_COV")); print(vac_cov_prim)
+  #vac_cov_prim <- as.numeric(Sys.getenv("V_COV")); print(vac_cov_prim)
+  vac_cov_prim <- vac_cov[1]
   
 } else {
-  country_nm <- "United_States"
+  country_nm <- "Portugal"
   rho_V_val <- 0.25 # Immune boosting coefficient (from V state)
   alpha_V_val <- 0.02 # Waning rate of vaccine-derived immunity (per year)
   rho_R_val <- 6.6 # Immune boosting coefficient (from R state)
   alpha_R_val <- 1 / 34 # Waning rate of infection-derived immunity (per year)
-  vac_cov_prim <- 0.9 # Vaccine coverage from primary series (NB: for boosters, coverage is assumed 10% lower) 
+  vac_cov_prim <- vac_cov[1] # Vaccine coverage from primary series (NB: for boosters, coverage is assumed 10% lower) 
 }
 
 # Name of file to save
@@ -74,7 +77,6 @@ if(demog_type == "empirical") {
   # Population sizes
   Ntot_val <- sum(demog_dat$pop) # Total population size
   N_vec <- c(demog_dat$pop[1] / delta_vec_type1[1], demog_dat$pop[1] / delta_vec_type1[2],  demog_dat$pop[-1]) # Age-specific population sizes
-  b_rate <- 13e-3 # Birth rate (per year)
   
   # Birth rate
   b_rate <- read_csv2(file = "_data/_demog/birth_rates_2010.csv", col_names = T, col_types = "cd")
@@ -109,7 +111,7 @@ age_df <- data.frame(age_fac = 1:nA, age_max = cumsum(1 / delta_vec_type1)) %>%
   select(age_fac, age_min, age_mid, age_max)
 
 # Age breaks for aggregated age groups
-age_breaks <- c(0, age_df$age_min[2], 1, 5, 10, 15, 20, 25, 45, 65, Inf)
+age_breaks <- c(0, age_df$age_min[2], 1, 5, 10, 15, 20, 25, 40, 50, 60, Inf)
 
 # Add factor age groups: 0-3 mo, 4-11 mo, 1-4 yr, 5-9 yr, 10-19 yr, 20-39 yr, 40-59 yr, >=60 yr
 age_df$age_cat <- cut(age_df$age_min, 
@@ -149,11 +151,7 @@ parms["N_tot"] <- Ntot_val
 parms["b_rate"] <- b_rate
 parms[c("alpha_R", "rho_R")] <- c(alpha_R_val, rho_R_val)
 parms[c("alpha_V", "rho_V")] <- c(alpha_V_val, rho_V_val)
-for(i in seq_along(ages_to_vac)) {
-  parms[paste0("p_V_", ages_to_vac[i])] <- ifelse(i == 1, vac_cov_prim, vac_cov_prim - 0.1)
-}
-
-parms["q1"] <- 0.77 * parms["q1"]
+parms[paste0("p_V_", ages_to_vac)] <- vac_cov
 
 stopifnot(all(parms >=0))
 
@@ -162,7 +160,7 @@ coef(seroMod, names(parms)) <- unname(parms)
 x0 <- rinit(seroMod)
 stopifnot(all.equal(sum(x0), Ntot_val))
 print(sprintf("Country: %s, Ntot = %.1fM, b_rate=%.3f per yr", country_nm, Ntot_val / 1e6, b_rate))
-print(coef(seroMod, c("alpha_V", "rho_V", "alpha_R", "rho_R", "p_V_1", "p_V_2", "p_V_3")))
+print(coef(seroMod, c("alpha_V", "rho_V", "alpha_R", "rho_R", paste0("p_V_", ages_to_vac))))
 
 # Names of state variables
 state_vars_nm <- c("S1", "S2", "E1", "E2", "I1", 

@@ -10,12 +10,12 @@ par(bty = "l", las = 1, lwd = 2)
 add_rugs <- F # Should rugs be added for every data point
 
 # Parameters of simulations to plot ---------------------------------------
-DV <- 50 # Average duration of vaccine-derived immunity (in years)
+DV <- 20 # Average duration of vaccine-derived immunity (in years)
 rhoV <- 0.25 # Boosting coefficient of vaccine-derived immunity
 vacCov <- 0.9 # Effective vaccine coverage
-DR <- 66 # Average duration of infection-derived immunity (in years)
-rhoR <- 0.66 # Boosting coefficient of infection-derived immunity
-n_doses <- 2 # No of vaccine doses
+DR <- 34 # Average duration of infection-derived immunity (in years)
+rhoR <- 6.6 # Boosting coefficient of infection-derived immunity
+n_doses <- 3 # No of vaccine doses
 nm_dir <- sprintf("DV_%.0f-rhoV_%.2f-DR_%.0f-rhoR_%.2f-vacCov_%.2f-%ddoses", DV, rhoV, DR, rhoR, vacCov, n_doses)
 stopifnot(dir.exists(sprintf("_saved/%s", nm_dir)))
 if(!dir.exists(sprintf("_figures/%s", nm_dir))) dir.create(sprintf("_figures/%s", nm_dir))
@@ -23,6 +23,7 @@ if(!dir.exists(sprintf("_figures/%s/_all", nm_dir))) dir.create(sprintf("_figure
 
 # Load simulations -------------------------------------------------------------
 l_files <- list.files(path = sprintf("_saved/%s", nm_dir), pattern = ".rds")
+l_files <- l_files[str_detect(string = l_files, pattern = "all", negate = T)]
 l_countries <- str_extract(string = l_files, pattern = "^(.*?)(?=-DV)")
 
 sims <- vector(mode = "list", length = length(l_files))
@@ -42,30 +43,28 @@ for(i in seq_along(l_files)) {
 }
 
 sims <- sims %>% 
-  bind_rows(.id = "country") %>% 
+  bind_rows(.id = "country")
+
+# Rename the age groups
+age_nm <- levels(sims$age_cat)
+age_nm <- str_extract_all(string = age_nm, pattern = "\\d+\\.\\d+|\\d+", simplify = T)
+
+sims <- sims %>% 
   mutate(country = fct_recode(country, 
                               "Czechia" = "Czech",
                               "UK" = "United-Kingdom", 
-                              "USA" = "United_States"), 
-         age_cat = fct_recode(age_cat, 
-                              "0-5 mo" = "[0,0.5)", 
-                              "6-11 mo" = "[0.5,1)", 
-                              "1-4 yo" = "[1,5)", 
-                              "5-9 yo" = "[5,10)", 
-                              "10-14 yo" = "[10,15)", 
-                              "15-19 yo" = "[15,20)", 
-                              "20-24 yo" = "[20,25)", 
-                              "25-44 yo" = "[25,45)", 
-                              "45-64 yo" = "[45,65)", 
-                              "65-79 yo" = "[65,Inf]"
-         ))
+                              "USA" = "United_States"))
 
+saveRDS(object = sims %>% filter(time >= max(time) - 19), 
+        file = paste0("_saved/", nm_dir, "/all-", nm_dir, ".rds"))
 
 # Subset simulated data -------------------------------------------------------------
+age_select <- c("[40,50)", "[50,60)", "[60,Inf]")
+
 sims_cur <- sims %>% 
   filter(time >= max(time) - 19, 
          var_nm %in% c("seroPrev", "seroPPV", "seroInc", "trueInc"), 
-         age_cat %in% c("25-44 yo", "45-64 yo", "65-79 yo")) %>% 
+         age_cat %in% age_select) %>% 
   mutate(prop = n / pop)
 
 # Summary: median of all variables
@@ -79,23 +78,27 @@ sims_sumry <- sims_cur %>%
 tmp <- sims_cur %>% 
   filter(var_nm == "seroPrev") %>% 
   group_by(age_cat) %>% 
-  summarise(q_inf = quantile(prop, probs = 0.025), 
-            q_sup = quantile(prop, probs = 0.975)) %>% 
+  summarise(
+    q_50 = quantile(prop, probs = 0.5), 
+    q_inf = quantile(prop, probs = 0.025), 
+    q_sup = quantile(prop, probs = 0.975)) %>% 
   ungroup()
 
 print("Seroprevalence, 95% prediction interval")
-print(tmp %>% mutate(q_inf = round(100 * q_inf, 1), q_sup = round(100 * q_sup, 1)))
+print(tmp %>% mutate(q_inf = round(100 * q_inf, 1), q_sup = round(100 * q_sup, 1), q_50 = round(100 * q_50, 1)))
 
 # Print range of median PPV estimates
 tmp <- sims_cur %>% 
   filter(var_nm == "seroPPV") %>% 
   group_by(age_cat) %>% 
-  summarise(q_inf = quantile(n, probs = 0.025), 
-            q_sup = quantile(n, probs = 0.975)) %>% 
+  summarise(
+    q_50 = quantile(n, probs = 0.5), 
+    q_inf = quantile(n, probs = 0.025), 
+    q_sup = quantile(n, probs = 0.975)) %>% 
   ungroup()
 
 print("PPV, 95% prediction interval")
-print(tmp %>% mutate(q_inf = round(100 * q_inf, 0), q_sup = round(100 * q_sup, 0)))
+print(tmp %>% mutate(q_inf = round(100 * q_inf, 0), q_sup = round(100 * q_sup, 0), q_50 = round(100 * q_50, 0)))
 
 # Order countries alphabetically
 country_order <- sort(levels(sims$country), decreasing = F)
@@ -113,25 +116,28 @@ tmp <- sims_cur %>%
 
 levels(tmp$country) <- rev(levels(tmp$country))
 
-pl <- ggplot(data = tmp, 
+pl <- ggplot(data = tmp %>% filter(country %in% levels(tmp$country)), 
              mapping = aes(x = 1e2 * val, y = country, fill = age_cat, color = age_cat)) + 
-  geom_density_ridges(scale = 0.9,
-                      stat = "density_ridges", 
-                      quantile_lines = T, 
-                      quantiles = 2, 
+  geom_density_ridges(scale = 0.95,
+                      stat = "density_ridges",
+                      quantile_lines = T,
+                      quantiles = 2,
                       jittered_points = add_rugs,
-                      point_shape = "|", 
+                      point_shape = "|",
                       position = position_points_jitter(height = 0),
-                      alpha = 0.5) + 
+                      alpha = 0.5) +
+  # geom_point(alpha = 0.5) + 
+  #stat_summary(fun.data = "median_hilow") + 
+  #geom_boxplot() + 
   facet_wrap(~ var_nm, scales = "free_x", ncol = 2) + 
   scale_color_viridis(option = "viridis", discrete = T, end = 0.5, direction = -1) + 
   scale_fill_viridis(option = "viridis", discrete = T, end = 0.5, direction = -1) + 
-  labs(x = "Value (%)", y = "SCM country", fill = "Age group", color = "") +
+  labs(x = "Value (%)", y = "Country", fill = "Age group (yr)", color = "") +
   theme_classic() + 
   theme(strip.background = element_blank(), 
         legend.position = "top", 
         strip.text = element_text(size = rel(1))
-        ) + 
+  ) + 
   guides(color = F)
 print(pl)
 
@@ -189,13 +195,13 @@ age_dist <- sims %>%
                              "Secondary infection" = "Ci2"))
 
 pl <- ggplot(data = age_dist, 
-             mapping = aes(x = age_cat, y = 1e5 * inc_mean, color = country, group = interaction(country, .id))) + 
-  geom_line(alpha = 0.75) + 
-  scale_color_brewer(palette = "Paired") + 
+             mapping = aes(x = age_cat, y = 1e5 * inc_mean, group = interaction(country, .id))) + 
+  geom_line(alpha = 0.5, color = "grey") + 
+  #scale_color_brewer(palette = "Paired") + 
   facet_wrap(~ var_nm, nrow = 2, scales = "free") + 
   theme_classic() + theme(strip.background = element_blank(), 
                           strip.text = element_text(size = rel(1)),
-                          legend.position = c(0.5, 0.8)) + 
+                          legend.position = c(0.8, 0.8)) + 
   #scale_y_sqrt() + 
   labs(x = "Age group", y = "Incidence rate (per year per 100,000)", color = "")
 print(pl)
@@ -207,20 +213,21 @@ ggsave(filename = sprintf("_figures/%s/sup_age_distribution.pdf", nm_dir),
 tmp <- sims %>% 
   filter(time >= max(time) - 19, 
          var_nm %in% c("Rp1", "Rp2", "Vp"), 
-         age_cat %in% c("25-44 yo", "45-64 yo", "65-79 yo")) %>% 
+         age_cat %in% age_select) %>% 
   mutate(prop = n / pop, 
          var_nm = factor(var_nm, levels = c("Vp", "Rp2", "Rp1"))) %>% 
   group_by(country, age_cat, var_nm) %>% 
   summarise(prop = mean(prop)) %>% 
   ungroup()
 
-pl <- ggplot(data = tmp %>% filter(country == "USA"), 
+pl <- ggplot(data = tmp %>% filter(country == "UK"), 
              mapping = aes(x = age_cat, y = prop, fill = var_nm)) + 
   geom_col(position = "fill") + 
   theme_classic() + 
   scale_fill_manual(values = c("#fbb4ae", "#fed9a6", "#b3cde3"), 
                     labels = c("Immune boost, vaccinated (Vp)", "Immune boost, recovered (Rp2)", "True infection (Rp1)")) + 
   theme(legend.position = "top") + 
+  scale_y_sqrt() + 
   labs(x = "Age group", y = "Proportion (relative to seroprevalence)", fill = "") 
 print(pl)
 

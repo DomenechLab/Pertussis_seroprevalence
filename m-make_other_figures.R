@@ -1,0 +1,73 @@
+#######################################################################################################
+# Make other figures
+#######################################################################################################
+
+rm(list = ls())
+source("s-base_packages.R")
+debug_bool <- F
+theme_set(theme_bw())
+par(bty = "l", las = 1, lwd = 2)
+
+# Plot DTP3 coverage data ------------------------------------------
+dtp3 <- read_xlsx(path = "_data/_vaccine_coverage/Diphtheria tetanus toxoid and pertussis (DTP) vaccination coverage 2024-11-09 10-33 UTC.xlsx")
+
+dtp3 <- dtp3 %>% 
+  select(-c(GROUP, ANTIGEN_DESCRIPTION, ANTIGEN)) %>% 
+  filter(!is.na(NAME))
+
+pl <- ggplot(data = dtp3, mapping = aes(x = YEAR, y = COVERAGE, color = COVERAGE_CATEGORY)) + 
+  geom_line() + 
+  facet_wrap(~ NAME, scales = "fixed", ncol = 3) + 
+  labs(x = "Year", y = "DTP3 coverage (%)")
+print(pl)
+
+# Plot DTP4 coverage data -------------------------------------------------
+dtp4 <- read_xlsx(path = "_data/_vaccine_coverage/Diphtheria tetanus toxoid and pertussis booster vaccination coverage 2024-16-09 12-05 UTC.xlsx")
+
+dtp4 <- dtp4 %>% 
+  select(-c(GROUP, ANTIGEN_DESCRIPTION, ANTIGEN)) %>% 
+  filter(!is.na(NAME))
+
+pl <- ggplot(data = dtp4, mapping = aes(x = YEAR, y = COVERAGE, color = COVERAGE_CATEGORY)) + 
+  geom_line() + 
+  facet_wrap(~ NAME, scales = "fixed", ncol = 3) + 
+  labs(x = "Year", y = "DTP4 coverage (%)")
+print(pl)
+
+# Merge datasets ----------------------------------------------------------
+
+dtp_all <- dtp3 %>% 
+  filter(COVERAGE_CATEGORY == "WUENIC") %>% 
+  select(-matches("COVERAGE_|TARGET|DOSES")) %>% 
+  mutate(vaccine = "DTP3") %>% 
+  full_join(y = dtp4 %>% 
+              filter(COVERAGE_CATEGORY == "ADMIN", NAME != "Belgium") %>% 
+              select(-matches("COVERAGE_|TARGET|DOSES")) %>% 
+              mutate(vaccine = "DTP4"))
+
+dtp_sumry <- dtp_all %>% 
+  group_by(CODE, NAME, vaccine) %>% 
+  filter(YEAR >= 1990) %>% 
+  summarise(mean_cov = mean(COVERAGE, na.rm = T)) %>% 
+  ungroup()
+
+# Plot
+pl <- ggplot(data = dtp_all %>% filter(YEAR >= 1990), 
+             mapping = aes(x = YEAR, y = COVERAGE, linetype = vaccine)) + 
+  geom_line() + 
+  facet_wrap(~ NAME, scales = "fixed", ncol = 3) + 
+  geom_text(data = dtp_sumry %>% filter(vaccine == "DTP3"), 
+            mapping = aes(x = 2000, y = 50, label = paste0("E(v3) = ", round(mean_cov, 1), "%"))) + 
+  geom_text(data = dtp_sumry %>% filter(vaccine == "DTP4"), 
+            mapping = aes(x = 2000, y = 25, label = paste0("E(v4) = ", round(mean_cov, 1), "%"))) + 
+  theme(panel.grid.minor = element_blank()) + 
+  labs(x = "Year", y = "DTP coverage (%)", linetype = "")
+print(pl)
+
+
+ggsave(filename = "_figures/_others/DTP_coverage.pdf", plot = pl, width = 10, height = 8)
+
+
+#######################################################################################################
+# END
+#######################################################################################################
