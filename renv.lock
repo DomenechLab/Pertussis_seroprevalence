@@ -81,6 +81,17 @@
       ],
       "Hash": "54fc333adf872599b177a62d5759892a"
     },
+    "Formula": {
+      "Package": "Formula",
+      "Version": "1.2-5",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "stats"
+      ],
+      "Hash": "7a29697b75e027767a53fde6c903eca7"
+    },
     "KernSmooth": {
       "Package": "KernSmooth",
       "Version": "2.23-24",
@@ -553,6 +564,18 @@
       ],
       "Hash": "f61dbaec772ccd2e17705c1e872e9e7c"
     },
+    "checkmate": {
+      "Package": "checkmate",
+      "Version": "2.3.2",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "backports",
+        "utils"
+      ],
+      "Hash": "0e14e01ce07e7c88fd25de6d4260d26b"
+    },
     "clValid": {
       "Package": "clValid",
       "Version": "0.7",
@@ -994,6 +1017,19 @@
       ],
       "Hash": "1a0a9a3d5083d0d573c4214576f1e690"
     },
+    "formula.tools": {
+      "Package": "formula.tools",
+      "Version": "1.7.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "methods",
+        "operator.tools",
+        "utils"
+      ],
+      "Hash": "935ab0bce1a92340866983f3a97e09de"
+    },
     "fs": {
       "Package": "fs",
       "Version": "1.6.4",
@@ -1408,6 +1444,17 @@
       ],
       "Hash": "a3e051d405326b8b0012377434c62b37"
     },
+    "latex2exp": {
+      "Package": "latex2exp",
+      "Version": "0.9.6",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "magrittr",
+        "stringr"
+      ],
+      "Hash": "f0173e0120a278700d48998e5a93a000"
+    },
     "lattice": {
       "Package": "lattice",
       "Version": "0.22-6",
@@ -1459,6 +1506,24 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "06ddb0b69b0714ae929b1b6029d6faf0"
+    },
+    "lemon": {
+      "Package": "lemon",
+      "Version": "0.4.9",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "ggplot2",
+        "grid",
+        "gridExtra",
+        "gtable",
+        "knitr",
+        "lattice",
+        "plyr",
+        "scales"
+      ],
+      "Hash": "7899526ee94f182512cca35bfe14704c"
     },
     "lifecycle": {
       "Package": "lifecycle",
@@ -1532,6 +1597,32 @@
         "rlang"
       ],
       "Hash": "e2817ccf4a065c5d9d7f2cfbe7c1d78c"
+    },
+    "metR": {
+      "Package": "metR",
+      "Version": "0.16.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "Formula",
+        "R",
+        "checkmate",
+        "data.table",
+        "digest",
+        "formula.tools",
+        "ggplot2",
+        "grid",
+        "gtable",
+        "isoband",
+        "lubridate",
+        "memoise",
+        "plyr",
+        "purrr",
+        "scales",
+        "sf",
+        "stringr"
+      ],
+      "Hash": "9c6acd90750310adec16684ca0c9a82b"
     },
     "mgcv": {
       "Package": "mgcv",
@@ -1695,6 +1786,16 @@
         "askpass"
       ],
       "Hash": "c62edf62de70cadf40553e10c739049d"
+    },
+    "operator.tools": {
+      "Package": "operator.tools",
+      "Version": "1.6.3",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "utils"
+      ],
+      "Hash": "bd93354f4a2ee4e096e3d7ad33e08b72"
     },
     "patchwork": {
       "Package": "patchwork",
