@@ -138,10 +138,11 @@ p_V <- 0.9
 which_mod <- "SIRRp"
 coef(mod[[which_mod]], names(theta[[which_mod]])) <- unname(theta[[which_mod]])
 coef(mod[[which_mod]], "p_V") <- p_V
-coef(mod[[which_mod]], "alpha_P") <- 1 / 0.75
+coef(mod[[which_mod]], "alpha_P") <- 1 / 1
 coef(mod[[which_mod]], c("V.0", "S.0", "I.0")) <- c(p_V, 1 - p_V - 1e-3, 1e-3)
-coef(mod[[which_mod]], c("rho_R", "alpha_R")) <- c(1.9, 1 / 360.2)
-coef(mod[[which_mod]], c("rho_V", "alpha_V")) <- c(1, 0.02)
+coef(mod[[which_mod]], c("rho_R", "rho_V")) <- 2
+coef(mod[[which_mod]], c("alpha_R", "alpha_V")) <- 1 / 40
+p_vec <- coef(mod[[which_mod]])
 
 stopifnot(sum(rinit(mod[[which_mod]])) == 1)
 
@@ -163,6 +164,12 @@ pl <- ggplot(data = tj_long, mapping = aes(x = time, y = prop)) +
 print(pl)
 
 print(filter(tj_long, time == max(time)))
+lambda_eq <- tj$lambda[which.max(tj$time)]
+
+f_D <- function(rho, alpha, alpha_P, lambda) (alpha_P + rho * lambda) * (alpha + rho * lambda) / (alpha_P * alpha^2)
+D <- f_D(rho = p_vec["rho_V"], alpha = p_vec["alpha_V"], alpha_P = p_vec["alpha_P"], lambda = lambda_eq)
+print(lambda_eq)
+print(D)
 
 # Grid search to calibrate rho_R -------------------------------------------------------------
 all_parms <- expand_grid(rho_R = seq(5, 20, length.out = 20), 

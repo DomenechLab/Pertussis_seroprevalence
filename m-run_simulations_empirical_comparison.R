@@ -22,9 +22,9 @@ par(bty = "l", las = 1, lwd = 2)
 print(packageVersion("pomp"))
 
 # Set country and model parameters --------------------------------------------------
-run_clust <- T # Simulations on cluster?
-save_plot <- T # Save all plots in PDF files?
-n_sims <- 10 # No of stochastic simulations 
+run_clust <- F # Simulations on cluster?
+save_plot <- F # Save all plots in PDF files?
+n_sims <- 1 # No of stochastic simulations 
 
 if(run_clust) {
   country_nm <- as.character(Sys.getenv("COUNTRY")); print(country_nm)
@@ -34,10 +34,10 @@ if(run_clust) {
   alpha_R_val <- 1 / as.numeric(Sys.getenv("D_R")); print(alpha_R_val)
 } else {
   country_nm <- "France"
-  rho_V_val <- 0.25 # Immune boosting coefficient (from V state)
-  alpha_V_val <- 0.05 # Waning rate of vaccine-derived immunity (per year)
+  rho_V_val <- 1 # Immune boosting coefficient (from V state)
+  alpha_V_val <- 1 / 10 # Waning rate of vaccine-derived immunity (per year)
   rho_R_val <- 1 # Immune boosting coefficient (from R state)
-  alpha_R_val <- 1 / 40 # Waning rate of infection-derived immunity (per year)
+  alpha_R_val <- 1 / 10 # Waning rate of infection-derived immunity (per year)
 }
 
 # Name of file to save
@@ -372,7 +372,7 @@ pl <- ggplot(data = tmp %>% filter(var_nm %in% c("seroInc", "trueInc")),
   labs(x = "Incidence rate (per year per 100,000)", 
        y = "Age group",
        title = paste0(country_nm, ", Incidence")) +
-  scale_x_log10() + 
+  scale_x_sqrt() + 
   theme_classic()
 print(pl)
 
