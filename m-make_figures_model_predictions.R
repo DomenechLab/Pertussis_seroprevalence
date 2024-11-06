@@ -10,13 +10,14 @@ par(bty = "l", las = 1, lwd = 2)
 add_rugs <- F # Should rugs be added for every data point
 
 # Parameters of simulations to plot ---------------------------------------
-DV <- 20 # Average duration of vaccine-derived immunity (in years)
-rhoV <- 0.25 # Boosting coefficient of vaccine-derived immunity
+DV <- 50 # Average duration of vaccine-derived immunity (in years)
+DR <- 50 # Average duration of infection-derived immunity (in years)
+rhoV <- 2 # Boosting coefficient of vaccine-derived immunity
+rhoR <- 2 # Boosting coefficient of infection-derived immunity
 vacCov <- 0.9 # Effective vaccine coverage
-DR <- 34 # Average duration of infection-derived immunity (in years)
-rhoR <- 6.6 # Boosting coefficient of infection-derived immunity
 n_doses <- 3 # No of vaccine doses
-nm_dir <- sprintf("DV_%.0f-rhoV_%.2f-DR_%.0f-rhoR_%.2f-vacCov_%.2f-%ddoses", DV, rhoV, DR, rhoR, vacCov, n_doses)
+#nm_dir <- sprintf("DV_%.0f-rhoV_%.2f-DR_%.0f-rhoR_%.2f-vacCov_%.2f-%ddoses", DV, rhoV, DR, rhoR, vacCov, n_doses)
+nm_dir <- sprintf("DV_%.0f-rhoV_%.2f-DR_%.0f-rhoR_%.2f", DV, rhoV, DR, rhoR)
 stopifnot(dir.exists(sprintf("_saved/%s", nm_dir)))
 if(!dir.exists(sprintf("_figures/%s", nm_dir))) dir.create(sprintf("_figures/%s", nm_dir))
 if(!dir.exists(sprintf("_figures/%s/_all", nm_dir))) dir.create(sprintf("_figures/%s/_all", nm_dir))
@@ -59,7 +60,7 @@ saveRDS(object = sims %>% filter(time >= max(time) - 19),
         file = paste0("_saved/", nm_dir, "/all-", nm_dir, ".rds"))
 
 # Subset simulated data -------------------------------------------------------------
-age_select <- c("[40,50)", "[50,60)", "[60,Inf]")
+age_select <- c("[20,40)", "[40,60)", "[60,Inf]")
 
 sims_cur <- sims %>% 
   filter(time >= max(time) - 19, 
@@ -92,9 +93,9 @@ tmp <- sims_cur %>%
   filter(var_nm == "seroPPV") %>% 
   group_by(age_cat) %>% 
   summarise(
-    q_50 = quantile(n, probs = 0.5), 
-    q_inf = quantile(n, probs = 0.025), 
-    q_sup = quantile(n, probs = 0.975)) %>% 
+    q_50 = quantile(n, probs = 0.5, na.rm = T), 
+    q_inf = quantile(n, probs = 0.025, na.rm = T), 
+    q_sup = quantile(n, probs = 0.975, na.rm = T)) %>% 
   ungroup()
 
 print("PPV, 95% prediction interval")
@@ -227,7 +228,7 @@ pl <- ggplot(data = tmp %>% filter(country == "UK"),
   scale_fill_manual(values = c("#fbb4ae", "#fed9a6", "#b3cde3"), 
                     labels = c("Immune boost, vaccinated (Vp)", "Immune boost, recovered (Rp2)", "True infection (Rp1)")) + 
   theme(legend.position = "top") + 
-  scale_y_sqrt() + 
+  #scale_y_sqrt() + 
   labs(x = "Age group", y = "Proportion (relative to seroprevalence)", fill = "") 
 print(pl)
 

@@ -15,7 +15,6 @@ library(adespatial)
 library(clValid)
 library(mgcv)
 library(gratia)
-
 theme_set(theme_bw())
 par(bty = "l", las = 1, lwd = 2)
 
@@ -159,32 +158,32 @@ deg_dist_sum <- deg_dist %>%
   mutate(assort_r = map_dbl(.x = dat_SCM_sub, .f = \(x) r_Newman(x)))
 
 # Estimate age with peak contacts using a GAM -----------------------------
-c_name <- "United_States"
-
-dd <- deg_dist %>% 
-  filter(country == c_name, age <= 30) %>% 
-  arrange(age)
-
-# Fit GAM
-mod <- gam(formula = r_cont ~ s(age), data = dd)
-
-# Extract samples of fitted values
-fs <- fitted_samples(model = mod, n = 500) %>% 
-  mutate(age = .row - 1)
-
-# Plot
-pl <- ggplot(data = dd, mapping = aes(x = age, y = r_cont)) + 
-  geom_line(data = fs, 
-            mapping = aes(x = age, y = .fitted, group = .draw), color = "grey", alpha = 0.5) + 
-  geom_line() 
-print(pl)
-
-# Estimate peak age
-age_max <- fs %>% 
-  group_by(.draw) %>% 
-  summarise(age_max = age[which.max(.fitted)]) %>% 
-  ungroup()
-print(quantile(age_max$age_max, probs = c(0.025, 0.5, 0.975)))
+# c_name <- "United_States"
+# 
+# dd <- deg_dist %>% 
+#   filter(country == c_name, age <= 30) %>% 
+#   arrange(age)
+# 
+# # Fit GAM
+# mod <- gam(formula = r_cont ~ s(age), data = dd)
+# 
+# # Extract samples of fitted values
+# fs <- fitted_samples(model = mod, n = 500) %>% 
+#   mutate(age = .row - 1)
+# 
+# # Plot
+# pl <- ggplot(data = dd, mapping = aes(x = age, y = r_cont)) + 
+#   geom_line(data = fs, 
+#             mapping = aes(x = age, y = .fitted, group = .draw), color = "grey", alpha = 0.5) + 
+#   geom_line() 
+# print(pl)
+# 
+# # Estimate peak age
+# age_max <- fs %>% 
+#   group_by(.draw) %>% 
+#   summarise(age_max = age[which.max(.fitted)]) %>% 
+#   ungroup()
+# print(quantile(age_max$age_max, probs = c(0.025, 0.5, 0.975)))
 
 # Put data in matrix format for clustering (row: country) --------------------------------
 dat_cur <- dat_NGM
@@ -238,7 +237,11 @@ cl_which <- cl_agnes
 k_which <- 12
 
 fviz_dend(x = cl_which, k = k_which, type = "phylogenic", k_colors = "npg")
-fviz_dend(x = cl_which, k = k_which, type = "rectangle", k_colors = "npg")
+fviz_dend(x = cl_which, k = k_which, type = "rectangle", k_colors = "npg", 
+          rect = T, 
+          rect_lty = 1, 
+          main = "", 
+          lower_rect = -110)
 
 # PAM algorithm
 #cl_pam <- pam(x = dist_mat, k = 5, diss = T)

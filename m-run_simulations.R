@@ -13,21 +13,22 @@ source("f-PlotMatrix.R")
 source("f-CreateSerotransModel.R")
 source("f-ReformatSims.R")
 source("f-CreateContactMatrix.R")
+source("f-compute_R0.R")
 debug_bool <- F
 theme_set(theme_bw())
 par(bty = "l", las = 1, lwd = 2)
 print(packageVersion("pomp"))
 
 # Set fixed parameters ----------------------------------------------------
-run_clust <- T
+run_clust <- F
 
 dt_sim <- 1 # Time step separating simulated data points 
 dt_mod <- 1e-3 # Time step for stochastic model simulator
-n_sims <- 10 # No of stochastic simulations 
+n_sims <- 1 # No of stochastic simulations 
 n_years_sim <- 300 # No of years of simulations (NB: vaccine is introduced at year 150)
 n_years_end <- 20 # No of years to consider at the end of the simulation
 ages_to_vac <- c(2, 3, 7) # Indices of ages to vaccinate (age = index - 2)
-vac_cov <- c(0.90, 0.90, 0.80) # Age-specific effective vaccine coverage 
+vac_cov <- c(0.90, 0.90, 0.9) # Age-specific effective vaccine coverage 
 stopifnot(length(ages_to_vac) == length(vac_cov))
 
 # SCM data
@@ -51,11 +52,11 @@ if(run_clust) {
   vac_cov_prim <- vac_cov[1]
   
 } else {
-  country_nm <- "Portugal"
-  rho_V_val <- 0.25 # Immune boosting coefficient (from V state)
-  alpha_V_val <- 0.02 # Waning rate of vaccine-derived immunity (per year)
-  rho_R_val <- 6.6 # Immune boosting coefficient (from R state)
-  alpha_R_val <- 1 / 34 # Waning rate of infection-derived immunity (per year)
+  country_nm <- "United_States"
+  rho_V_val <- 1 # Immune boosting coefficient (from V state)
+  rho_R_val <- 1 # Immune boosting coefficient (from R state)
+  alpha_R_val <- 1 / 30 # Waning rate of infection-derived immunity (per year)
+  alpha_V_val <- 1 / 30 # Waning rate of vaccine-derived immunity (per year)
   vac_cov_prim <- vac_cov[1] # Vaccine coverage from primary series (NB: for boosters, coverage is assumed 10% lower) 
 }
 
@@ -111,7 +112,7 @@ age_df <- data.frame(age_fac = 1:nA, age_max = cumsum(1 / delta_vec_type1)) %>%
   select(age_fac, age_min, age_mid, age_max)
 
 # Age breaks for aggregated age groups
-age_breaks <- c(0, age_df$age_min[2], 1, 5, 10, 15, 20, 25, 40, 50, 60, Inf)
+age_breaks <- c(0, age_df$age_min[2], 1, 5, 10, 15, 20, 40, 60, Inf)
 
 # Add factor age groups: 0-3 mo, 4-11 mo, 1-4 yr, 5-9 yr, 10-19 yr, 20-39 yr, 40-59 yr, >=60 yr
 age_df$age_cat <- cut(age_df$age_min, 
@@ -167,6 +168,23 @@ state_vars_nm <- c("S1", "S2", "E1", "E2", "I1",
                    "I2", "R", "Re", "Rp1", "Rp2", 
                    "V", "Ve", "Vp")
 accum_vars_nm <- c("Ci1", "Ci2", "Cs")
+
+# Calculate basic reproduction number (R0) -------------------------------------
+q1_val <- unname(coef(seroMod, "q1"))
+q2_val <- unname(coef(seroMod, "q21")) * q1_val
+q3_val <- unname(coef(seroMod, "q32")) * q2_val
+
+q_vec <- c(rep(q1_val, 11), rep(q2_val, 10), rep(q3_val, 60))
+
+NGM <- compute_R0(theta = unname(coef(seroMod, "theta")), 
+                  gamma = unname(coef(seroMod, "gamma")), 
+                  N = N_vec, 
+                  q = q_vec, 
+                  delta = delta_vec, 
+                  Cmat = SCMs$M_mat, 
+                  type = "SIR")
+R0_val <- NGM %>% eigen() %>% pluck("values") %>% abs() %>% max()
+rm(q1_val, q2_val, q3_val)
 
 # Run simulation -----------------------------------------------------
 sims_list <- bake(file = paste0(nm_file_save, ".rds"), 
@@ -260,10 +278,11 @@ pl <- ggplot(data = age_dist,
   theme_classic() + 
   labs(x = "Age (years)", 
        y = "Incidence rate (per year per 100)", 
-       title = sprintf("%s, Prevaccine era, mean(A1) = %.1f (%.1f), mode(A1) = %.1f (%.1f) years", 
+       title = sprintf("%s, Prevaccine era, mean(A1) = %.1f (%.1f), mode(A1) = %.1f (%.1f) years, R0=%.1f", 
                        country_nm, 
                        mean(age_dist_stats$mean), sd(age_dist_stats$mean), 
-                       mean(age_dist_stats$mode), sd(age_dist_stats$mode)))
+                       mean(age_dist_stats$mode), sd(age_dist_stats$mode), 
+                       R0_val))
 print(pl)
 
 # Calculate mean age at second infection (vaccine era) -----------------------------------
@@ -300,6 +319,23 @@ pl <- ggplot(data = age_dist,
                        mean(age_dist_stats$mean), sd(age_dist_stats$mean), 
                        mean(age_dist_stats$mode), sd(age_dist_stats$mode)))
 print(pl)
+
+# Compute FoI --------------------------------------------------------------------
+# theta_val <- unname(coef(seroMod, "theta"))
+# iota_val <- unname(coef(seroMod, "iota"))
+# 
+# tmp2 <- sims_all %>% 
+#   filter(var_nm %in% c("I1", "I2")) %>% 
+#   select(-var_type) %>% 
+#   pivot_wider(names_from = "var_nm", values_from = "n") %>% 
+#   arrange(.id, time, age_fac) %>% 
+#   group_by(.id, time) %>% 
+#   mutate(lambda = q_vec * (F_mat %*% (I1 + theta_val * I2 + iota_val))) %>% 
+#   ungroup()
+# 
+# pl <- ggplot(data = tmp2 %>% filter(time == max(time)), mapping = aes(x = age_fac, y = lambda)) + 
+#   geom_line()
+# print(pl)
 
 # Plot serological endpoints -------------------------------------------
 tmp <- sims_agg %>% 
