@@ -75,19 +75,37 @@ pl <- ggplot(data = sims_95_PI %>% filter(var_nm == "Sp"),
         panel.grid.major.y = element_line(),
         strip.background = element_blank(), 
         strip.text = element_text(size = 11)) +
-  labs(x = "Seroprevalence (%)", y = "Country", color = "Age group (yr)", size = "SD (%)")
+  labs(x = "Seroprevalence (%)", y = "Country", color = "Age group (yo)", size = "SD (%)")
 print(pl)
 
-# Figure: Breakdown of Sp, for different rho values -------------------------------------------------
+ggsave(plot = pl, filename = "_figures/main/fig_Sp_predictions_all_scenarios.pdf", width = 8, height = 8)
+
+
+# Figure: Time plot of Sp (convergence check) -------------------------------------------------
+  
 ct <- "USA"
+tmp <- sims_wide %>% 
+  filter(country == ct) %>% 
+  mutate(rho_val = as.character(rho_val), 
+         age_cat = factor(age_cat), 
+         rho_val = factor(rho_val))
+levels(tmp$age_cat) <- paste0(levels(tmp$age_cat), " yo")
+levels(tmp$rho_val) <- paste0("rho = ", levels(tmp$rho_val))
 
 # Plot overall incidence
-pl <- ggplot(data = sims_wide %>% filter(country == ct), 
-             mapping = aes(x = time, y = 1e5 * trueInc / pop, color = .id)) + 
-  geom_line() + 
-  facet_grid(rho_val ~ age_cat, scales = "free")
+pl <- ggplot(data = tmp, 
+             mapping = aes(x = time, y = 1e2 * Sp, group = .id)) + 
+  geom_line(color = "grey") + 
+  facet_rep_grid(rho_val ~ age_cat, scales = "free_y") + 
+  theme_classic() + 
+  theme(legend.position = "right", 
+        strip.background = element_blank()) +
+  labs(x = "Time (years)", y = "Seroprevalence (%)")
 print(pl)
 
+ggsave(plot = pl, filename = sprintf("_figures/main/fig_Sp_convergence_%s.pdf", ct), width = 10, height = 8)
+
+# Figure: Breakdown of Sp, for different rho values -------------------------------------------------
 tmp <- sims_wide %>% 
   filter(country == ct) %>% 
   select(rho_val:pop, Vp, Rp1, Rp2) %>% 
@@ -110,8 +128,47 @@ pl <- ggplot(data = tmp,
   theme(legend.position = "top", 
         strip.background = element_blank(), 
         strip.text = element_text(size = 11)) +
-  labs(x = "Age group (yr)", y = "Relative proportion", fill = "") 
+  labs(x = "Age group (yo)", y = "Relative proportion", fill = "") 
 print(pl)
+ggsave(plot = pl, filename = sprintf("_figures/main/fig_Sp_breakdown_%s.pdf", ct), width = 8, height = 8)
+
+# Figure: (S1+S2), V, and R as a function of age and rho ----------------------------------------------------------------
+ct <- "USA"
+
+tmp <- sims_wide %>% 
+  filter(country == ct) %>% 
+  mutate(S = S1 + S2, 
+         V_R = V + R, 
+         lambda = trueInc / S) %>% 
+  select(rho_val:pop, S, lambda, Rp1, seroPrev) %>% 
+  pivot_longer(cols = S:seroPrev, names_to = "var_nm", values_to = "prop") %>% 
+  mutate(prop = if_else(var_nm == 'lambda', prop, prop / pop), 
+         var_nm = factor(var_nm)) %>% 
+  group_by(rho_val, age_cat, var_nm) %>% 
+  summarise(prop = median(prop)) %>% 
+  ungroup() %>% 
+  mutate(var_nm = fct_recode(var_nm, 
+                             "Force of infection (% per yr)" = "lambda", 
+                             "Fraction susceptible to infection (%)" = "S",
+                             "Seroprevalence, true infections (%)" = "Rp1", 
+                             "Seroprevalence, overall (%)" = "seroPrev"
+                             ))
+
+pl <- ggplot(data = tmp, 
+             mapping = aes(x = age_cat, y = 100 * prop, color = rho_val, group = rho_val)) + 
+  geom_point() + 
+  geom_line() + 
+  facet_rep_wrap(~ var_nm, scales = "free_y", ncol = 2, dir = "v") + 
+  scale_color_viridis(option = "viridis", discrete = T, end = 1, direction = -1) + 
+  theme_classic() + 
+  theme(legend.position = "top", 
+        #panel.grid.major.y = element_line(),
+        strip.background = element_blank(), 
+        strip.text = element_text(size = 11)) +
+  labs(x = "Age group (yo)", y = "Value", color = TeX("$\\rho_R = \\rho_V$"))
+print(pl)
+
+ggsave(plot = pl, filename = sprintf("_figures/main/fig_FoI_S_Sp_%s.pdf", ct), width = 8, height = 8)
 
 #######################################################################################################
 # End
