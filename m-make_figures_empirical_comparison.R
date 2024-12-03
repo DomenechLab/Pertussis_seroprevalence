@@ -13,6 +13,8 @@ par(bty = "l", las = 1, lwd = 2)
 t_V <- 150 # Year of vaccine introduction
 path_to_res <- "_saved/estimation_6_countries/rho_5.00/" # Path to saved results
 suffix <- str_extract(string = path_to_res, pattern = "rho_[0-9].[0-9]+") # String to append to PDF file name
+rho_val <- path_to_res %>% str_extract("[0-9].[0-9]+") %>% as.numeric()
+print(rho_val)
 
 # Load seroprevalence data ------------------------------------------------
 dat_seroprev <- read_xlsx(path = "_data/_seroprevalence/seroprevalence_data_Pebody_Wehlin.xlsx", 
@@ -73,6 +75,25 @@ for(i in seq_along(mod_preds)) {
 
 mod_preds <- mod_preds %>% 
   bind_rows(.id = "DV")
+
+# Calculate effective duration of immunity --------------------------------
+mod_preds_FoI <- mod_preds %>% 
+  mutate(DV = as.numeric(DV)) %>% 
+  filter(var_nm %in% c("S1", "S2", "trueInc"), age_cat %in% c("[20,40)", "[20,45)")) %>% 
+  select(-var_type) %>% 
+  pivot_wider(names_from = "var_nm", values_from = "n") %>% 
+  mutate(FoI = trueInc / (S1 + S2)) %>% 
+  left_join(y = sims_details[, c("country", "t_n")]) %>% 
+  group_by(country, t_n, DV) %>% 
+  summarise(FoI = median(FoI)) %>% 
+  ungroup() %>% 
+  mutate(DV_eff = DV * (1 + t_n * rho_val * FoI)) %>% 
+  select(country, t_n, FoI, everything())
+
+print("FoI range")
+print(range(mod_preds_FoI$FoI) %>% round(3))
+print("Duration of immunity inflation factor")
+print(range(mod_preds_FoI$DV_eff / mod_preds_FoI$DV - 1) %>% round(3))
 
 # Calculate seroprevalence and PPV ----------------------------------------
 mod_preds_sub <- mod_preds %>% 
@@ -159,7 +180,7 @@ print(pl)
 
 # Make plot in first adult age group--------------------------------------------------------------
 # See https://sahirbhatnagar.com/blog/2016/02/08/ggplot2-facet-wrap-labels/ for how to add the mathematical annotations
-appender <- function(string) TeX(paste0("$\\alpha_R^{-1} = \\alpha_V^{-1}= $", string, " yr"))
+appender <- function(string) TeX(paste0("$\\alpha^{-1}= $", string, " yr"))
 
 pl <- ggplot(data = pred_obs %>% filter(age_cat_no == 1, DV %in% est_perf$DV[est_perf$include]), 
              mapping = aes(x = 100 * Sp_obs_est, 

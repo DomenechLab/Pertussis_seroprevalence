@@ -1,6 +1,6 @@
 #######################################################################################################
 # Make figure for all scenarios (different rho values) across countries
-# Pick the best estimate of 1 / alpha (with lowest MWSE) for every value of rho
+# Pick the same value of D (duration of immunity) to facilitate the comparison
 #######################################################################################################
 
 rm(list = ls())
@@ -59,8 +59,8 @@ sims_95_PI_wide <- sims_95_PI %>%
   select(-c(q_inf, q_sup, q_sd)) %>% 
   pivot_wider(names_from = "var_nm", values_from = "q_med")
 
-# Figure: Sp across countries, for different rho values -------------------------------------------------------------
-appender <- function(string) TeX(paste0("$\\rho_R = \\rho_V = $", string))
+# Figure: Sp across countries, for different rho values (point size: SD) -------------------------------------------------------------
+appender <- function(string) TeX(paste0("$\\rho = $", string))
 
 pl <- ggplot(data = sims_95_PI %>% filter(var_nm == "Sp"), 
              mapping = aes(x = 100 * q_med, y = fct_rev(country), color = age_cat, size = 100 * q_sd)) + 
@@ -75,14 +75,51 @@ pl <- ggplot(data = sims_95_PI %>% filter(var_nm == "Sp"),
         panel.grid.major.y = element_line(),
         strip.background = element_blank(), 
         strip.text = element_text(size = 11)) +
-  labs(x = "Seroprevalence (%)", y = "Country", color = "Age group (yo)", size = "SD (%)")
+  labs(x = "Seroprevalence (%)", y = "Country", color = "Age group (yrs)", size = "SD (%)")
 print(pl)
 
-ggsave(plot = pl, filename = "_figures/main/fig_Sp_predictions_all_scenarios.pdf", width = 8, height = 8)
+ggsave(plot = pl, filename = "_figures/main/fig_Sp_predictions_all_scenarios-1.pdf", width = 8, height = 8)
 
+# Figure: Sp across countries, for different rho values (color: PPV) -------------------------------------------------------------
+appender <- function(string) TeX(paste0("$\\rho = $", string))
+
+pl <- ggplot(data = sims_95_PI_wide, 
+                 mapping = aes(x = 100 * Sp, y = fct_rev(country), shape = age_cat, color = 100 * PPV)) + 
+  geom_point(size = rel(2)) + 
+  facet_rep_wrap(~as.character(rho_val), 
+                 labeller = as_labeller(x = appender, default = label_parsed), 
+                 scales = "fixed") + 
+  scale_color_viridis(option = "magma") + 
+  theme_classic() + 
+  theme(legend.position = "top", 
+        panel.grid.major.y = element_line(),
+        strip.background = element_blank(), 
+        strip.text = element_text(size = 11)) +
+  labs(x = "Seroprevalence (%)", y = "Country", shape = "Age group (yrs)", color = "PPV (%)")
+print(pl)
+ggsave(plot = pl, filename = "_figures/main/fig_Sp_predictions_all_scenarios-2.pdf", width = 8, height = 8)
+
+# Figure: Sp across countries, for different rho values (point size: PPV) -------------------------------------------------------------
+appender <- function(string) TeX(paste0("$\\rho = $", string))
+
+pl <- ggplot(data = sims_95_PI_wide, 
+             mapping = aes(x = 100 * Sp, y = fct_rev(country), color = age_cat, size = 100 * PPV)) + 
+  geom_point() + 
+  facet_rep_wrap(~as.character(rho_val), 
+                 labeller = as_labeller(x = appender, default = label_parsed), 
+                 scales = "fixed") + 
+  scale_color_viridis(option = "viridis", discrete = T, end = 1, direction = -1) + 
+  theme_classic() + 
+  theme(legend.position = "top", 
+        panel.grid.major.y = element_line(),
+        strip.background = element_blank(), 
+        strip.text = element_text(size = 11)) +
+  labs(x = "Seroprevalence (%)", y = "Country", color = "Age group (yrs)", size = "PPV (%)")
+print(pl)
+ggsave(plot = pl, filename = "_figures/main/fig_Sp_predictions_all_scenarios-3.pdf", width = 8, height = 8)
 
 # Figure: Time plot of Sp (convergence check) -------------------------------------------------
-  
+
 ct <- "USA"
 tmp <- sims_wide %>% 
   filter(country == ct) %>% 
@@ -139,33 +176,39 @@ tmp <- sims_wide %>%
   filter(country == ct) %>% 
   mutate(S = S1 + S2, 
          V_R = V + R, 
+         Vp_Rp2 = Rp2 + Vp, 
          lambda = trueInc / S) %>% 
-  select(rho_val:pop, S, lambda, Rp1, seroPrev) %>% 
-  pivot_longer(cols = S:seroPrev, names_to = "var_nm", values_to = "prop") %>% 
-  mutate(prop = if_else(var_nm == 'lambda', prop, prop / pop), 
+  select(rho_val:pop, S, Rp1, V_R, Vp_Rp2, seroPrev, lambda) %>% 
+  pivot_longer(cols = S:lambda, names_to = "var_nm", values_to = "prop") %>% 
+  mutate(prop = if_else(var_nm %in% c('lambda'), prop, prop / pop), 
          var_nm = factor(var_nm)) %>% 
   group_by(rho_val, age_cat, var_nm) %>% 
   summarise(prop = median(prop)) %>% 
-  ungroup() %>% 
+  ungroup()
+
+tmp <- tmp %>% 
+  mutate(var_nm = fct_relevel(var_nm, "lambda", "seroPrev", "S", "Rp1", "V_R", "Vp_Rp2")) %>% 
   mutate(var_nm = fct_recode(var_nm, 
-                             "Force of infection (% per yr)" = "lambda", 
-                             "Fraction susceptible to infection (%)" = "S",
-                             "Seroprevalence, true infections (%)" = "Rp1", 
-                             "Seroprevalence, overall (%)" = "seroPrev"
-                             ))
+                             "Force~of~Infection~(lambda)" = "lambda",
+                             "Fraction~susceptible~to~infection~(S[1]+S[2])" = "S",
+                             "Seroprevalence~from~true~infections~(R[P1])" = "Rp1",
+                             "Fraction~immune~to~infection~(V+R)" = "V_R",
+                             "Seroprevalence~from~immune~boosts~(V[P]+R[P2])" = "Vp_Rp2",
+                             "Overall~seroprevalence" = "seroPrev"
+  ))
 
 pl <- ggplot(data = tmp, 
              mapping = aes(x = age_cat, y = 100 * prop, color = rho_val, group = rho_val)) + 
   geom_point() + 
   geom_line() + 
-  facet_rep_wrap(~ var_nm, scales = "free_y", ncol = 2, dir = "v") + 
+  facet_rep_wrap(~ var_nm, scales = "free_y", ncol = 2, dir = "h", labeller = "label_parsed") + 
   scale_color_viridis(option = "viridis", discrete = T, end = 1, direction = -1) + 
   theme_classic() + 
   theme(legend.position = "top", 
         #panel.grid.major.y = element_line(),
         strip.background = element_blank(), 
         strip.text = element_text(size = 11)) +
-  labs(x = "Age group (yo)", y = "Value", color = TeX("$\\rho_R = \\rho_V$"))
+  labs(x = "Age group (yrs)", y = "Value (%)", color = TeX("Boosting coefficient ($\\rho$)"))
 print(pl)
 
 ggsave(plot = pl, filename = sprintf("_figures/main/fig_FoI_S_Sp_%s.pdf", ct), width = 8, height = 8)
