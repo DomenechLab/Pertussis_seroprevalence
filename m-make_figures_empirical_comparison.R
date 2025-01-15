@@ -88,12 +88,14 @@ mod_preds_FoI <- mod_preds %>%
   summarise(FoI = median(FoI)) %>% 
   ungroup() %>% 
   mutate(DV_eff = DV * (1 + t_n * rho_val * FoI)) %>% 
-  select(country, t_n, FoI, everything())
+  select(country, t_n, FoI, everything()) %>% 
+  filter(between(DV, 30, 60))
 
-print("FoI range")
-print(range(mod_preds_FoI$FoI) %>% round(3))
-print("Duration of immunity inflation factor")
-print(range(mod_preds_FoI$DV_eff / mod_preds_FoI$DV - 1) %>% round(3))
+print("FoI median, range (%)")
+print(median(100 * mod_preds_FoI$FoI) %>% round(1))
+print(range(100 * mod_preds_FoI$FoI) %>% round(1))
+print("Duration of immunity inflation factor (%)")
+print(range(mod_preds_FoI$DV_eff / mod_preds_FoI$DV) %>% round(2))
 
 # Calculate seroprevalence and PPV ----------------------------------------
 mod_preds_sub <- mod_preds %>% 
@@ -159,6 +161,13 @@ tmp <- pred_obs %>%
   filter(DV %in% est_perf$DV[est_perf$me_pval >= 0.05], age_cat_no == 1)
 print(range(100 * tmp$PPV_pred_q_med) %>% round(0))
 
+# Save observations and predictions ---------------------------------------
+to_save <- pred_obs %>% 
+  mutate(rho = rho_val) %>% 
+  select(rho, DV, DV_title, everything())
+
+saveRDS(object = to_save, file = paste0(path_to_res, "pred_obs_all.rds"))
+
 # Weighted linear model ---------------------------------------------------
 dat_test <- pred_obs %>% 
   filter(DV == 10, age_cat_no == 1) %>% 
@@ -216,6 +225,54 @@ print(pl)
 
 ggsave(filename = sprintf("_figures/main/fig_empirical_comparison-%s.pdf", suffix), 
        plot = pl, width = 8, height = 8)
+
+
+# Make figure for best DV across rho values ---------------------------------------------------------
+
+# Load results
+dirs_nm <- paste0("_saved/estimation_6_countries/rho_", c("0.50", "1.00", "2.00", "5.00"), "/")
+
+tmp <- dirs_nm %>% 
+  map(.f = \(x) readRDS(paste0(x, "pred_obs_all.rds"))) %>% 
+  bind_rows() %>% 
+  mutate(DV_rho = paste0(rho, "_", DV)) %>% 
+  filter(DV_rho %in% c("0.5_30", "1_30", "2_40", "5_40"))
+
+# Make plots
+appender <- function(string) TeX(paste0("$\\rho= $", string))
+
+pl <- ggplot(data = tmp %>% filter(age_cat_no == 1), 
+             mapping = aes(x = 100 * Sp_obs_est, 
+                           y = 100 * Sp_pred_q_med, 
+                           label = country_short)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey") + 
+  geom_linerange(mapping = aes(xmin = 100 * Sp_obs_inf, xmax = 100 * Sp_obs_sup), color = "grey") + 
+  geom_linerange(mapping = aes(ymin = 100 * Sp_pred_q_inf, ymax = 100 * Sp_pred_q_sup), color = "grey") + 
+  geom_point(mapping = aes(colour = 100 * PPV_pred_q_med, shape = cut_off), size = rel(3)) + 
+  scale_color_viridis(discrete = F, option = "magma", direction = 1, begin = 0, end = 1, trans = "identity") + 
+  scale_shape_manual(values = c(17, 16)) + 
+  geom_text_repel(force_pull = 0) + 
+  facet_rep_wrap(~ as.character(rho), 
+                 labeller = as_labeller(x = appender, default = label_parsed), 
+                 scales = "fixed", 
+                 dir = "h", 
+                 ncol = 2) + 
+  theme_classic() + 
+  theme(legend.position = "top", 
+        panel.grid = element_blank(),
+        #axis.line = element_line(color = "black", size = 0.5),  # Keep axis 
+        strip.background = element_blank(), 
+        strip.text = element_text(size = 11)) + 
+  labs(x = "Observed seroprevalence (%)", 
+       y = "Predicted seroprevalence (%)", 
+       color = "PPV (%)", 
+       shape = "IgG seropositivity threshold")
+print(pl)
+
+ggsave(filename = "_figures/main/fig_empirical_comparison-all.pdf", 
+       plot = pl, 
+       width = 8, 
+       height = 8)
 
 #######################################################################################################
 # END 

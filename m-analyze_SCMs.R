@@ -15,6 +15,7 @@ library(adespatial)
 library(clValid)
 library(mgcv)
 library(gratia)
+library(lemon)
 theme_set(theme_bw())
 par(bty = "l", las = 1, lwd = 2)
 
@@ -156,6 +157,39 @@ deg_dist_sum <- deg_dist %>%
   ) %>% 
   ungroup() %>% 
   mutate(assort_r = map_dbl(.x = dat_SCM_sub, .f = \(x) r_Newman(x)))
+
+
+# Plot SCMs in 16 countries -----------------------------------------------
+c_names_all <- read.table(file = "_data/list_countries2.txt") %>% pluck(1)
+c_names_all <- unique(c(c_names, c_names_all))
+
+tmp <- dat_SCM[c_names_all] 
+names(tmp) <- c_names_all
+tmp <- lapply(tmp, reshape2:::melt)
+tmp <- tmp %>%
+  bind_rows(.id = "country") %>% 
+  mutate(country = factor(country)) %>% 
+  mutate(country = fct_recode(country, 
+                               "USA" = "United_States", 
+                               "UK" = "United-Kingdom", 
+                               "Czechia" = "Czech")) %>% 
+  mutate(country = fct_relevel(country, "USA", after = Inf))
+
+i_vec <- list(1:8, 9:16)
+
+for(i in seq_along(i_vec)) {
+  pl <- ggplot(data = tmp %>% filter(country %in% levels(tmp$country)[i_vec[[i]]]), 
+               mapping = aes(x = Var1 - 1, y = Var2 - 1, fill = value)) + 
+    geom_tile() + 
+    scale_fill_viridis(option = "rocket", trans = "sqrt") + 
+    facet_rep_wrap(~ country, scales = "fixed", ncol = 2) + 
+    theme_classic() + 
+    theme(legend.position = "top", panel.grid = element_blank(), strip.background = element_blank()) + 
+    labs(x = "Age (years)", y = "Age (years)", fill = "Daily contact rate")
+  print(pl)
+  
+  ggsave(plot = pl, filename = sprintf("_figures/main/fig_SCMs_%d.pdf", i), width = 8, height = 8)
+}
 
 # Estimate age with peak contacts using a GAM -----------------------------
 # c_name <- "United_States"
