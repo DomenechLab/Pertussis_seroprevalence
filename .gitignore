@@ -7,4 +7,4 @@ _help/
 _saved/
 .DS_Store
 z-dump.R
-s-cluster_inputs.txt
+s-cluster_*

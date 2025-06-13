@@ -6,6 +6,7 @@
 rm(list = ls())
 source("s-base_packages.R")
 library(lemon)
+library(egg) # For function tag_facet
 library(latex2exp)
 debug_bool <- F
 theme_set(theme_bw())
@@ -66,16 +67,17 @@ pl <- ggplot(data = sims_95_PI %>% filter(var_nm == "Sp"),
              mapping = aes(x = 100 * q_med, y = fct_rev(country), color = age_cat, size = 100 * q_sd)) + 
   geom_point() + 
   #geom_linerange(mapping = aes(xmin = 100 * q_inf, xmax = 100 * q_sup)) + 
-  facet_rep_wrap(~as.character(rho_val), 
-                 labeller = as_labeller(x = appender, default = label_parsed), 
-                 scales = "fixed") + 
+  facet_wrap(~as.character(rho_val), 
+             labeller = as_labeller(x = appender, default = label_parsed), 
+             axes = "all", axis.labels = "margins",
+             scales = "fixed") + 
   scale_color_viridis(option = "viridis", discrete = T, end = 1, direction = -1) + 
   theme_classic() + 
   theme(legend.position = "top", 
         panel.grid.major.y = element_line(),
         strip.background = element_blank(), 
         strip.text = element_text(size = 11)) +
-  labs(x = "Seroprevalence (%)", y = "Country", color = "Age group (yrs)", size = "SD (%)")
+  labs(x = "Seroprevalence (%)", y = "Country", color = "Age group (years)", size = "SD (%)")
 print(pl)
 
 ggsave(plot = pl, filename = "_figures/main/fig_Sp_predictions_all_scenarios-1.pdf", width = 8, height = 8)
@@ -84,18 +86,19 @@ ggsave(plot = pl, filename = "_figures/main/fig_Sp_predictions_all_scenarios-1.p
 appender <- function(string) TeX(paste0("$\\rho = $", string))
 
 pl <- ggplot(data = sims_95_PI_wide, 
-                 mapping = aes(x = 100 * Sp, y = fct_rev(country), shape = age_cat, color = 100 * PPV)) + 
+             mapping = aes(x = 100 * Sp, y = fct_rev(country), shape = age_cat, color = 100 * PPV)) + 
   geom_point(size = rel(2)) + 
-  facet_rep_wrap(~as.character(rho_val), 
-                 labeller = as_labeller(x = appender, default = label_parsed), 
-                 scales = "fixed") + 
+  facet_wrap(~as.character(rho_val), 
+             labeller = as_labeller(x = appender, default = label_parsed), 
+             axes = "all", axis.labels = "margins",
+             scales = "fixed") + 
   scale_color_viridis(option = "magma") + 
   theme_classic() + 
   theme(legend.position = "top", 
         panel.grid.major.y = element_line(),
         strip.background = element_blank(), 
         strip.text = element_text(size = 11)) +
-  labs(x = "Seroprevalence (%)", y = "Country", shape = "Age group (yrs)", color = "PPV (%)")
+  labs(x = "Seroprevalence (%)", y = "Country", shape = "Age group (years)", color = "PPV (%)")
 print(pl)
 ggsave(plot = pl, filename = "_figures/main/fig_Sp_predictions_all_scenarios-2.pdf", width = 8, height = 8)
 
@@ -105,16 +108,16 @@ appender <- function(string) TeX(paste0("$\\rho = $", string))
 pl <- ggplot(data = sims_95_PI_wide, 
              mapping = aes(x = 100 * Sp, y = fct_rev(country), color = age_cat, size = 100 * PPV)) + 
   geom_point() + 
-  facet_rep_wrap(~as.character(rho_val), 
-                 labeller = as_labeller(x = appender, default = label_parsed), 
-                 scales = "fixed") + 
+  facet_wrap(~as.character(rho_val), 
+             labeller = as_labeller(x = appender, default = label_parsed), 
+             scales = "fixed", axes = "all", axis.labels = "margins") + 
   scale_color_viridis(option = "viridis", discrete = T, end = 1, direction = -1) + 
   theme_classic() + 
   theme(legend.position = "top", 
         panel.grid.major.y = element_line(),
         strip.background = element_blank(), 
         strip.text = element_text(size = 11)) +
-  labs(x = "Seroprevalence (%)", y = "Country", color = "Age group (yrs)", size = "PPV (%)")
+  labs(x = "Seroprevalence (%)", y = "Country SCM", color = "Age group (years)", size = "PPV (%)")
 print(pl)
 ggsave(plot = pl, filename = "_figures/main/fig_Sp_predictions_all_scenarios-3.pdf", width = 8, height = 8)
 
@@ -129,18 +132,28 @@ tmp <- sims_wide %>%
 levels(tmp$age_cat) <- paste0(levels(tmp$age_cat), " yo")
 levels(tmp$rho_val) <- paste0("rho = ", levels(tmp$rho_val))
 
+tmp <- tmp %>% 
+  mutate(seroInc = seroInc / pop, 
+         trueInc = trueInc / pop) %>% 
+  pivot_longer(cols = -c(rho_val:pop))
+
 # Plot overall incidence
-pl <- ggplot(data = tmp, 
-             mapping = aes(x = time, y = 1e2 * Sp, group = .id)) + 
-  geom_line(color = "grey") + 
+pl <- ggplot(data = tmp %>% filter(name %in% c("seroInc", "trueInc")), 
+             mapping = aes(x = time, y = 1e5 * value, 
+                           group = interaction(.id, name), color = name)) + 
+  geom_line() + 
   facet_rep_grid(rho_val ~ age_cat, scales = "free_y") + 
   theme_classic() + 
-  theme(legend.position = "right", 
+  theme(legend.position = "top", 
         strip.background = element_blank()) +
-  labs(x = "Time (years)", y = "Seroprevalence (%)")
+  scale_y_log10() + 
+  scale_color_manual(labels = c("Sero-incidence", "True incidence of infections"), 
+                     values = c("seroInc" = "#fb8072", "trueInc" = "#80b1d3")) + 
+  labs(x = "Time (years)", y = "Incidence rate (per 100,000)", color = "")
 print(pl)
 
-ggsave(plot = pl, filename = sprintf("_figures/main/fig_Sp_convergence_%s.pdf", ct), width = 10, height = 8)
+ggsave(plot = pl, filename = sprintf("_figures/main/fig_Sp_convergence_%s.pdf", ct), 
+       width = 10, height = 8)
 
 # Figure: Breakdown of Sp, for different rho values -------------------------------------------------
 tmp <- sims_wide %>% 
@@ -165,7 +178,7 @@ pl <- ggplot(data = tmp,
   theme(legend.position = "top", 
         strip.background = element_blank(), 
         strip.text = element_text(size = 11)) +
-  labs(x = "Age group (yo)", y = "Relative proportion", fill = "") 
+  labs(x = "Age group (years)", y = "Relative proportion", fill = "") 
 print(pl)
 ggsave(plot = pl, filename = sprintf("_figures/main/fig_Sp_breakdown_%s.pdf", ct), width = 8, height = 8)
 
@@ -188,30 +201,97 @@ tmp <- sims_wide %>%
 
 tmp <- tmp %>% 
   mutate(var_nm = fct_relevel(var_nm, "lambda", "seroPrev", "S", "Rp1", "V_R", "Vp_Rp2")) %>% 
-  mutate(var_nm = fct_recode(var_nm, 
-                             "Force~of~Infection~(lambda)" = "lambda",
-                             "Fraction~susceptible~to~infection~(S[1]+S[2])" = "S",
-                             "Seroprevalence~from~true~infections~(R[P1])" = "Rp1",
-                             "Fraction~immune~to~infection~(V+R)" = "V_R",
-                             "Seroprevalence~from~immune~boosts~(V[P]+R[P2])" = "Vp_Rp2",
-                             "Overall~seroprevalence" = "seroPrev"
-  ))
+  mutate(var_nm2 = fct_recode(var_nm, 
+                              "Force~of~Infection~(lambda)" = "lambda",
+                              "Fraction~susceptible~to~infection~(S[1]+S[2])" = "S",
+                              "Seroprevalence~from~true~infections~(R[P1])" = "Rp1",
+                              "Fraction~immune~to~infection~(V+R)" = "V_R",
+                              "Seroprevalence~from~immune~boosts~(V[P]+R[P2])" = "Vp_Rp2",
+                              "Overall~seroprevalence" = "seroPrev"), 
+         var_nm3 = fct_recode(var_nm, 
+                              "lambda" = "lambda",
+                              "S[1] + S[2]" = "S",
+                              "R[P1]" = "Rp1",
+                              "R + V" = "V_R",
+                              "R[P2] + V[P]" = "Vp_Rp2",
+                              "R[P1] +  R[P2] + V[P]" = "seroPrev"))
 
 pl <- ggplot(data = tmp, 
              mapping = aes(x = age_cat, y = 100 * prop, color = rho_val, group = rho_val)) + 
   geom_point() + 
   geom_line() + 
-  facet_rep_wrap(~ var_nm, scales = "free_y", ncol = 2, dir = "h", labeller = "label_parsed") + 
-  scale_color_viridis(option = "viridis", discrete = T, end = 1, direction = -1) + 
+  # geom_text(data = data.frame(text = LETTERS[1:6], var_nm3 = levels(tmp$var_nm3)), 
+  #           mapping = aes(x = -Inf, y = Inf, label = text), 
+  #           hjust = -0.2, vjust = -0.2, 
+  #           inherit.aes = F) + 
+  facet_rep_wrap(~ var_nm3, scales = "free_y", ncol = 2, 
+                 dir = "h", labeller = "label_parsed", strip.position = "left") + 
+  scale_color_viridis(option = "viridis", discrete = T, end = 1, direction = -1)
+
+pl <- tag_facet(p = pl, open = "", close = "", tag_pool = LETTERS, fontface = 2)
+
+pl <- pl + 
   theme_classic() + 
+  #theme_bw() + 
   theme(legend.position = "top", 
-        #panel.grid.major.y = element_line(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank(),
         strip.background = element_blank(), 
+        strip.placement = "outside",
+        #strip.background = element_rect(fill = "#f0f0f0"),
         strip.text = element_text(size = 11)) +
-  labs(x = "Age group (yrs)", y = "Value (%)", color = TeX("Boosting coefficient ($\\rho$)"))
+  labs(x = "Age group (years)", y = "", color = TeX("Boosting coefficient ($\\rho$)"))
 print(pl)
 
-ggsave(plot = pl, filename = sprintf("_figures/main/fig_FoI_S_Sp_%s.pdf", ct), width = 8, height = 8)
+ggsave(plot = pl, filename = sprintf("_figures/main/fig_FoI_S_Sp_%s.pdf", ct), 
+       width = 8, height = 8)
+
+# Same plot, other display ------------------------------------------------
+# df_nm <- data.frame(var_nm = levels(tmp$var_nm),
+#                     var_nm2 = c("Force of infection, $\\lambda$ (% per year)",
+#                                 "Fraction susceptible to infection, $S_1 + S_2$ (%)",
+#                                 "Seroprevalence from true infections, $R_{P,1}$ (%)",
+#                                 "Fraction immune to infection, V+R (%)",
+#                                 "Seroprevalence from immune boosts, $V_P + R_{P,2}$ (%)",
+#                                 "Overall seroprevalence"), 
+#                     var_nm3 = c("$\\lambda$ (% per year)",
+#                                 "$S_1 + S_2$ (%)",
+#                                 "$R_{P,1}$ (%)",
+#                                 "$V+R$ (%)",
+#                                 "$R_{P,2} + V_P$ (%)",
+#                                 "$R_{P,1} + R_{P,2} + V_P$ (%)"))
+# 
+# pl <- vector(mode = "list", length = nlevels(tmp$var_nm))
+# for(i in seq_along(levels(tmp$var_nm))) {
+#   
+#   var_cur <- levels(tmp$var_nm)[i]
+#   pl[[i]] <- ggplot(data = tmp %>% filter(var_nm == var_cur),
+#                     mapping = aes(x = age_cat, y = 100 * prop, color = rho_val, group = rho_val)) +
+#     geom_point() +
+#     geom_line() +
+#     scale_color_viridis(option = "viridis", discrete = T, end = 1, direction = -1) +
+#     theme_classic() +
+#     theme(legend.position = "top",
+#           #panel.grid.major.y = element_line(),
+#           strip.background = element_blank(),
+#           strip.text = element_text(size = 11)) +
+#     labs(x = "Age group (years)", y = TeX(df_nm$var_nm3[i]), 
+#          #color = TeX("Boosting coefficient ($\\rho$)")
+#          color = "Boosting coefficient"
+#     )
+#   print(pl[[i]])
+# }
+# 
+# # Arrange plots
+# 
+# pl_all <- (pl[[1]] / pl[[3]] / pl[[5]] + plot_layout(axes = "collect_x")) | 
+#   (pl[[2]] / pl[[4]] / pl[[6]] + plot_layout(axes = "collect_x"))
+# pl_all <- pl_all +  plot_layout(guides = "collect", axes = "collect") & theme(legend.position='top') 
+# pl_all <- pl_all + plot_annotation(tag_levels = "A") 
+# print(pl_all)
+# 
+# ggsave(plot = pl_all, filename = sprintf("_figures/main/fig_FoI_S_Sp_%s.pdf", ct), 
+#        width = 8, height = 8)
 
 #######################################################################################################
 # End
