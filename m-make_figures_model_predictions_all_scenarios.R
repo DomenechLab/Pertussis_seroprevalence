@@ -8,6 +8,7 @@ source("s-base_packages.R")
 library(lemon)
 library(egg) # For function tag_facet
 library(latex2exp)
+library(ggnewscale) # for function new_scale_fill
 debug_bool <- F
 theme_set(theme_bw())
 par(bty = "l", las = 1, lwd = 2)
@@ -32,6 +33,8 @@ sims <- bind_rows(sims, .id = "rho_val")
 age_cats <- levels(sims$age_cat)
 age_cat_choose <- age_cats[(length(age_cats) - 2):length(age_cats)]
 print(age_cat_choose)
+
+levels(sims$country) <- sort(levels(sims$country))
 
 # Recast in wide format and calculate PPV ---------------------------------
 sims_wide <- sims %>% 
@@ -77,7 +80,7 @@ pl <- ggplot(data = sims_95_PI %>% filter(var_nm == "Sp"),
         panel.grid.major.y = element_line(),
         strip.background = element_blank(), 
         strip.text = element_text(size = 11)) +
-  labs(x = "Seroprevalence (%)", y = "Country", color = "Age group (years)", size = "SD (%)")
+  labs(x = "Seroprevalence (%)", y = "Country", color = "Age (years)", size = "SD (%)")
 print(pl)
 
 ggsave(plot = pl, filename = "_figures/main/fig_Sp_predictions_all_scenarios-1.pdf", width = 8, height = 8)
@@ -98,7 +101,7 @@ pl <- ggplot(data = sims_95_PI_wide,
         panel.grid.major.y = element_line(),
         strip.background = element_blank(), 
         strip.text = element_text(size = 11)) +
-  labs(x = "Seroprevalence (%)", y = "Country", shape = "Age group (years)", color = "PPV (%)")
+  labs(x = "Seroprevalence (%)", y = "Country", shape = "Age (years)", color = "PPV (%)")
 print(pl)
 ggsave(plot = pl, filename = "_figures/main/fig_Sp_predictions_all_scenarios-2.pdf", width = 8, height = 8)
 
@@ -117,9 +120,55 @@ pl <- ggplot(data = sims_95_PI_wide,
         panel.grid.major.y = element_line(),
         strip.background = element_blank(), 
         strip.text = element_text(size = 11)) +
-  labs(x = "Seroprevalence (%)", y = "Country SCM", color = "Age group (years)", size = "PPV (%)")
+  labs(x = "Seroprevalence (%)", y = "Country SCM", color = "Age (years)", size = "PPV (%)")
 print(pl)
 ggsave(plot = pl, filename = "_figures/main/fig_Sp_predictions_all_scenarios-3.pdf", width = 8, height = 8)
+
+
+# Figure: Sp across countries for different rho (color: PPV, one color scale per age group) ---------------------------------------------
+appender <- function(string) TeX(paste0("$\\rho = $", string))
+ages_order <- c("20-39", "40-59", "60-79")
+ages_order <- ages_order[c(1,2,3)]
+ages_order_nm <- paste0(ages_order, " yo")
+
+pl <- ggplot(data = sims_95_PI_wide %>% filter(age_cat == ages_order[1]), 
+             mapping = aes(x = 100 * Sp, y = fct_rev(country), color = 100 * PPV)) + 
+  geom_point(size = rel(2)) + 
+  facet_wrap(~as.character(rho_val), 
+             labeller = as_labeller(x = appender, default = label_parsed), 
+             axes = "all", axis.labels = "margins",
+             scales = "fixed") + 
+  scale_color_continuous_sequential(palette = "Purp", 
+                                    name = ages_order[1], 
+                                    #name = paste0("PPV (%)    ", ages_order[1]), 
+                                    begin = 0.2, 
+                                    limits = range(100 * sims_95_PI_wide$PPV[sims_95_PI_wide$age_cat == ages_order[1]])) +
+  new_scale_color() + 
+  geom_point(data = sims_95_PI_wide %>% filter(age_cat == ages_order[2]), 
+             mapping = aes(x = 100 * Sp, y = fct_rev(country), color = 100 * PPV), 
+             size = rel(2)) + 
+  scale_color_continuous_sequential(palette = "Greens", 
+                                    name = ages_order[2], 
+                                    begin = 0.2, 
+                                    limits = range(100 * sims_95_PI_wide$PPV[sims_95_PI_wide$age_cat == ages_order[2]])) + 
+  new_scale_color() + 
+  geom_point(data = sims_95_PI_wide %>% filter(age_cat == ages_order[3]), 
+             mapping = aes(x = 100 * Sp, y = fct_rev(country), color = 100 * PPV), 
+             size = rel(2)) + 
+  scale_color_continuous_sequential(palette = "Oranges", 
+                                    name = ages_order[3],
+                                    #name = paste0("PPV (%)    ", ages_order[3]), 
+                                    begin = 0.2, 
+                                    limits = range(100 * sims_95_PI_wide$PPV[sims_95_PI_wide$age_cat == ages_order[3]])) + 
+  theme_classic() + 
+  theme(legend.position = "top", 
+        plot.title = element_text(size = 11, hjust = 0.5),  
+        panel.grid.major.y = element_line(),
+        strip.background = element_blank(), 
+        strip.text = element_text(size = 11)) +
+  labs(x = "Seroprevalence (%)", y = "Country", title = "PPV (%)")
+print(pl)
+ggsave(plot = pl, filename = "_figures/main/fig_Sp_predictions_all_scenarios-4.pdf", width = 8, height = 8)
 
 # Figure: Time plot of Sp (convergence check) -------------------------------------------------
 
@@ -178,7 +227,7 @@ pl <- ggplot(data = tmp,
   theme(legend.position = "top", 
         strip.background = element_blank(), 
         strip.text = element_text(size = 11)) +
-  labs(x = "Age group (years)", y = "Relative proportion", fill = "") 
+  labs(x = "Age (years)", y = "Relative proportion", fill = "") 
 print(pl)
 ggsave(plot = pl, filename = sprintf("_figures/main/fig_Sp_breakdown_%s.pdf", ct), width = 8, height = 8)
 
@@ -240,7 +289,7 @@ pl <- pl +
         strip.placement = "outside",
         #strip.background = element_rect(fill = "#f0f0f0"),
         strip.text = element_text(size = 11)) +
-  labs(x = "Age group (years)", y = "", color = TeX("Boosting coefficient ($\\rho$)"))
+  labs(x = "Age (years)", y = "", color = TeX("Boosting coefficient ($\\rho$)"))
 print(pl)
 
 ggsave(plot = pl, filename = sprintf("_figures/main/fig_FoI_S_Sp_%s.pdf", ct), 
