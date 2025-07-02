@@ -49,10 +49,10 @@ mod1_init <- Csnippet("
 # Base model parameters
 parms_mod1 <- c("mu" = 1 / 80, # Birth/death rate
                 "pV" = 0.9, # Effective vaccination coverage
-                "Rzero" = 5, # Basic reproduction number
+                "Rzero" = 15, # Basic reproduction number
                 "sigma" = 365 / 8, # 1 / average latent period
                 "gamma" = 365 / 15, # 1 / average infectious period
-                "tn" = 1, # Average duration of seropositivity
+                "tn" = 1.9, # Average duration of seropositivity
                 "alpha" = 1 / 40, # 1 / average duration of immunity
                 "rho" = 0.5) # Boosting coefficient
 
@@ -74,7 +74,7 @@ stopifnot(sum(rinit(mod1)) == 1)
 
 # Test simulation ----------------------------------------------------------
 coef(mod1, names(parms_mod1)) <- unname(parms_mod1)
-coef(mod1, "Rzero") <- 10
+coef(mod1, "Rzero") <- 15
 coef(mod1, c("rho", "alpha")) <- c(2, 1 / 300)
 coef(mod1, "pV") <- 0
 
@@ -106,13 +106,13 @@ print(sumry)
 
 # Calibrate alpha (waning rate) to reach target seroprevalence -----------------------------
 coef(mod1, names(parms_mod1)) <- unname(parms_mod1) # Reset parameters
-target_prev <- 0.1 # Target seroprevalence
+target_prev <- 0.2 # Target seroprevalence
 print(coef(mod1))
 
 # Generate list of alpha parameters for given R0 and different rho
-parms_df <- tibble(rho = c(0.5, 1, 2, 5), 
-                   Rzero = 10,
-                   alpha = list(1 / seq(20, 350, by = 10))) %>% 
+parms_df <- tibble(rho = c(0.5, 1), 
+                   Rzero = 15,
+                   alpha = list(1 / seq(20, 500, by = 10))) %>% 
   unnest(cols = "alpha")
 
 parms_mat <- parmat(params = coef(mod1), nrep = nrow(parms_df))
@@ -208,10 +208,10 @@ mod2_init <- Csnippet("
 # Base model parameters
 parms_mod2 <- c("mu" = 1 / 80, # Birth/death rate
                 "pV" = 0.9, # Effective vaccination coverage
-                "Rzero" = 10, # Basic reproduction number
+                "Rzero" = 15, # Basic reproduction number
                 "sigma" = 365 / 8, # 1 / average latent period
                 "gamma" = 365 / 15, # 1 / average infectious period
-                "tn" = 1, # Average duration of seropositivity
+                "tn" = 1.9, # Average duration of seropositivity
                 "alpha" = 1 / 40, # 1 / average duration of immunity
                 "rho" = 0.5, # Boosting coefficient in V1/R1 stage
                 "kappa" = 1) # Relative boosting coefficient in V2/R2 stage
@@ -234,7 +234,7 @@ stopifnot(sum(rinit(mod2)) == 1)
 
 # Test simulation ----------------------------------------------------------
 coef(mod2, names(parms_mod2)) <- unname(parms_mod2)
-coef(mod2, "Rzero") <- 10
+coef(mod2, "Rzero") <- 15
 coef(mod2, c("rho", "alpha", "kappa")) <- c(2, 1 / 40, 1)
 # coef(mod2, "pV") <- 0
 
@@ -267,16 +267,14 @@ print(sumry)
 # Calibrate alpha to reach target seroprevalence -----------------------------
 coef(mod2, names(parms_mod2)) <- unname(parms_mod2) # Reset parameters
 print(coef(mod2))
-target_prev <- 0.1 # Target seroprevalence
+target_prev <- 0.2 # Target seroprevalence
 
 # List of candidates alphas
-parms_df <- tibble(rho = c(0.5, 1, 2, 5), 
-                   Rzero = 10,
+parms_df <- tibble(rho = c(0.5, 1), 
+                   Rzero = 15,
                    kappa = 1,
-                   alpha = list(1 / seq(20, 100, by = 5), 
-                                1 / seq(20, 100, by = 5), 
-                                1 / seq(40, 100, by = 5), 
-                                1 / seq(70, 150, by = 5))) %>% 
+                   alpha = list(1 / seq(5, 200, by = 5), 
+                                1 / seq(5, 500, by = 5))) %>% 
   unnest(cols = "alpha")
 
 parms_mat <- parmat(params = coef(mod2), nrep = nrow(parms_df))
