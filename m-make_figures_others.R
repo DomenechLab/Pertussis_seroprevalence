@@ -8,6 +8,47 @@ debug_bool <- F
 theme_set(theme_bw())
 par(bty = "l", las = 1, lwd = 2)
 
+
+# Plot demographic data ---------------------------------------------------
+ct_list <- read.table(file = "_data/list_countries.txt") %>% pluck(1)
+ct_list2 <- read.table(file = "_data/list_countries2.txt") %>% pluck(1)
+
+ct_list <- c(ct_list, ct_list2)
+ct_list <- sort(unique(ct_list))
+rm(ct_list2)
+
+demog <- vector(mode = "list", length = length(ct_list))
+names(demog) <- ct_list
+
+for(ct in ct_list) {
+  demog[[ct]] <- read_csv(file = sprintf("_data/_demog/_2010/%s_country_level_age_distribution_85.csv", ct), 
+                          col_names = c("age", "pop"), 
+                          col_types = "d") %>% 
+    arrange(age) %>% 
+    filter(age <= 79)
+}
+
+names(demog)[names(demog) %in% c("United_States", "United-Kingdom", "Czech")] <- c("USA", "UK", "Czechia")
+
+demog <- demog %>% 
+  bind_rows(.id = "country") %>% 
+  arrange(country) %>% 
+  group_by(country) %>% 
+  mutate(pop_rel = pop / sum(pop)) %>% 
+  ungroup()
+
+pl <- ggplot(data = demog, mapping = aes(x = age, y = 1e2 * pop_rel)) + 
+  #geom_line() + 
+  geom_col() + 
+  facet_wrap(~ country, ncol = 2, scales = "fixed", axis.labels = "margins", axes = "all") + 
+  theme_classic() + 
+  theme(strip.background = element_blank()) + 
+  labs(x = "Age (years)", y = "Population size (relative to total population size), %")
+print(pl)
+
+ggsave(plot = pl, 
+       filename = "_figures/main/fig_demog_structure.pdf", width = 8, height = 8)
+
 # Plot DTP3 coverage data ------------------------------------------
 dtp3 <- read_xlsx(path = "_data/_vaccine_coverage/Diphtheria tetanus toxoid and pertussis (DTP) vaccination coverage 2024-11-09 10-33 UTC.xlsx")
 
