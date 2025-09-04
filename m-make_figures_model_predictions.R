@@ -10,8 +10,8 @@ par(bty = "l", las = 1, lwd = 2)
 add_rugs <- F # Should rugs be added for every data point
 
 # Parameters of simulations to plot ---------------------------------------
-DV <- 50 # Average duration of vaccine-derived immunity (in years)
-DR <- 50 # Average duration of infection-derived immunity (in years)
+DV <- 40 # Average duration of vaccine-derived immunity (in years)
+DR <- 40 # Average duration of infection-derived immunity (in years)
 rhoV <- 2 # Boosting coefficient of vaccine-derived immunity
 rhoR <- 2 # Boosting coefficient of infection-derived immunity
 vacCov <- 0.9 # Effective vaccine coverage

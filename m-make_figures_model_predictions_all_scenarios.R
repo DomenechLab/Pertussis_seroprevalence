@@ -9,6 +9,7 @@ library(lemon)
 library(egg) # For function tag_facet
 library(latex2exp)
 library(ggnewscale) # for function new_scale_fill
+library(colorspace)
 debug_bool <- F
 theme_set(theme_bw())
 par(bty = "l", las = 1, lwd = 2)
@@ -138,37 +139,51 @@ pl <- ggplot(data = sims_95_PI_wide %>% filter(age_cat == ages_order[1]),
              labeller = as_labeller(x = appender, default = label_parsed), 
              axes = "all", axis.labels = "margins",
              scales = "fixed") + 
-  scale_color_continuous_sequential(palette = "Purp", 
-                                    name = ages_order[1], 
-                                    #name = paste0("PPV (%)    ", ages_order[1]), 
+  scale_color_continuous_sequential(palette = "Purple-Blue", 
+                                    name = ages_order_nm[1], 
                                     begin = 0.2, 
                                     limits = range(100 * sims_95_PI_wide$PPV[sims_95_PI_wide$age_cat == ages_order[1]])) +
   new_scale_color() + 
   geom_point(data = sims_95_PI_wide %>% filter(age_cat == ages_order[2]), 
              mapping = aes(x = 100 * Sp, y = fct_rev(country), color = 100 * PPV), 
              size = rel(2)) + 
-  scale_color_continuous_sequential(palette = "Greens", 
-                                    name = ages_order[2], 
+  scale_color_continuous_sequential(palette = "Red-Yellow", 
+                                    name = ages_order_nm[2], 
                                     begin = 0.2, 
                                     limits = range(100 * sims_95_PI_wide$PPV[sims_95_PI_wide$age_cat == ages_order[2]])) + 
   new_scale_color() + 
   geom_point(data = sims_95_PI_wide %>% filter(age_cat == ages_order[3]), 
              mapping = aes(x = 100 * Sp, y = fct_rev(country), color = 100 * PPV), 
              size = rel(2)) + 
-  scale_color_continuous_sequential(palette = "Oranges", 
-                                    name = ages_order[3],
-                                    #name = paste0("PPV (%)    ", ages_order[3]), 
+  scale_color_continuous_sequential(palette = "Green-Yellow", 
+                                    name = ages_order_nm[3],
                                     begin = 0.2, 
                                     limits = range(100 * sims_95_PI_wide$PPV[sims_95_PI_wide$age_cat == ages_order[3]])) + 
   theme_classic() + 
   theme(legend.position = "top", 
         plot.title = element_text(size = 11, hjust = 0.5),  
         panel.grid.major.y = element_line(),
+        #panel.grid.major.y = element_blank(),
         strip.background = element_blank(), 
         strip.text = element_text(size = 11)) +
   labs(x = "Seroprevalence (%)", y = "Country", title = "PPV (%)")
 print(pl)
 ggsave(plot = pl, filename = "_figures/main/fig_Sp_predictions_all_scenarios-4.pdf", width = 8, height = 8)
+
+# Summary statistics ------------------------------------------------------
+tmp <- sims_95_PI_wide %>% 
+  filter(age_cat != "40-59") %>% 
+  arrange(rho_val, country, age_cat) %>% 
+  group_by(rho_val, country) %>% 
+  summarise(Sp_rel = Sp[age_cat == "60-79"] / Sp[age_cat == "20-39"]) %>% 
+  ungroup()
+
+library(lme4)
+mod_boost <- lmer(formula = log(PPV) ~ 1 + factor(rho_val) + (1 | country), 
+                data = filter(sims_95_PI_wide, age_cat == "20-39"))
+
+mod_age <- lmer(formula = log(PPV) ~ 1 + age_cat + (1 | country), 
+                  data = filter(sims_95_PI_wide, rho_val == 0.5))
 
 # Figure: Time plot of Sp (convergence check) -------------------------------------------------
 

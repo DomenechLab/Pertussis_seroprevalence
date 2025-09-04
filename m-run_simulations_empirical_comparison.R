@@ -24,7 +24,7 @@ print(packageVersion("pomp"))
 # Set country and model parameters --------------------------------------------------
 run_clust <- F # Simulations on cluster?
 save_plot <- F # Save all plots in PDF files?
-n_sims <- 1 # No of stochastic simulations 
+n_sims <- 10 # No of stochastic simulations 
 
 if(run_clust) {
   country_nm <- as.character(Sys.getenv("COUNTRY")); print(country_nm)
